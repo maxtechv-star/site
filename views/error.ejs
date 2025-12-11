@@ -54,6 +54,7 @@
         <!-- Error Header -->
         <div class="error-header">
             <% 
+                // Initialize variables safely
                 let errorIcon = 'fas fa-exclamation-triangle';
                 let errorTitle = 'Error';
                 let errorSubtitle = 'Something went wrong';
@@ -104,13 +105,19 @@
             </div>
             
             <!-- Supabase specific error messages -->
-            <% if (message && message.includes('Supabase') || message && message.includes('database')) { %>
+            <% if (message && (message.includes('Supabase') || message.includes('database') || message.includes('PGRST'))) { %>
             <div class="supabase-error <%= message.includes('connection') ? 'connection-error' : message.includes('storage') ? 'storage-error' : 'database-error' %>">
-                <h4><i class="fas fa-database"></i> Supabase Connection Issue</h4>
+                <h4><i class="fas fa-database"></i> Database Connection Issue</h4>
                 <p>
                     There seems to be an issue with our database connection. 
                     This is usually temporary. Try refreshing the page in a few moments.
                 </p>
+                <% if (message.includes('PGRST204') || message.includes('schema cache')) { %>
+                <p style="margin-top: 10px; font-size: 0.8rem;">
+                    <i class="fas fa-exclamation-circle"></i> 
+                    Database table not found. The admin needs to run database setup.
+                </p>
+                <% } %>
             </div>
             <% } %>
             
@@ -290,7 +297,7 @@
         
         // Log error to console for debugging
         console.error('QuickDeploy Error <%= status || 500 %>: <%= message || "Unknown error" %>');
-        <% if (error && error.message) { %>
+        <% if (typeof error !== 'undefined' && error && error.message) { %>
         console.error('Error details:', '<%= error.message %>');
         <% } %>
         
@@ -308,7 +315,11 @@
         }
         
         // Check status on 500 errors
-        if (<%= [500, 502, 503, 504].includes(status) %>) {
+        const statusCode = <%= status || 500 %>;
+        const statusCodes = [500, 502, 503, 504];
+        const isStatusError = statusCodes.includes(statusCode);
+        
+        if (isStatusError) {
             checkSupabaseStatus();
         }
         
@@ -323,7 +334,10 @@
         });
         
         // Auto-redirect after 30 seconds for certain errors
-        if (<%= [404, 500, 503].includes(status) %>) {
+        const redirectStatusCodes = [404, 500, 503];
+        const shouldRedirect = redirectStatusCodes.includes(statusCode);
+        
+        if (shouldRedirect) {
             setTimeout(() => {
                 if (confirm('You will be redirected to the homepage. Click OK to continue or Cancel to stay.')) {
                     window.location.href = '/';
