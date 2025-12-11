@@ -1,10 +1,8 @@
-<!-- Global Loading Spinner (hidden by default) -->
 <div id="globalSpinner" class="loading-spinner">
     <div class="spinner"></div>
     <p>Loading...</p>
 </div>
 
-<!-- Confirmation Modal -->
 <div id="confirmationModal" class="modal">
     <div class="modal-content fade-in">
         <div class="modal-header">
@@ -12,7 +10,7 @@
             <button onclick="closeModal()" class="close-btn">&times;</button>
         </div>
         <div class="modal-body">
-            <p id="modalMessage">Are you sure you want to proceed?</p>
+            <p id="modalMessage">Are you sure?</p>
         </div>
         <div class="modal-footer">
             <button onclick="closeModal()" class="btn btn-outline">Cancel</button>
@@ -21,7 +19,6 @@
     </div>
 </div>
 
-<!-- Alert Modal -->
 <div id="alertModal" class="modal">
     <div class="modal-content fade-in">
         <div class="modal-header">
@@ -37,47 +34,74 @@
     </div>
 </div>
 
-<!-- Quick Stats Bar (Fixed at bottom) -->
-<div class="quick-stats-bar">
-    <div class="stats-container">
-        <div class="stat">
-            <i class="fas fa-server"></i>
-            <span id="liveDeployments">0</span>
-            <small>Live</small>
-        </div>
-        <div class="stat">
-            <i class="fas fa-database"></i>
-            <span id="storageUsed">0 MB</span>
-            <small>Storage</small>
-        </div>
-        <div class="stat">
-            <i class="fas fa-clock"></i>
-            <span id="uptime">100%</span>
-            <small>Uptime</small>
-        </div>
-        <div class="stat">
-            <i class="fas fa-user"></i>
-            <span id="activeUsers">1</span>
-            <small>Users</small>
-        </div>
-    </div>
-</div>
-
-<!-- Live Chat/Support Button (Optional) -->
-<button class="support-btn" onclick="openSupport()" data-tooltip="Need help?">
-    <i class="fas fa-question-circle"></i>
-</button>
-
-<!-- Back to Top Button -->
-<button class="back-to-top" onclick="scrollToTop()" data-tooltip="Back to top">
+<button class="back-to-top" onclick="scrollToTop()" title="Back to top">
     <i class="fas fa-arrow-up"></i>
 </button>
 
 <style>
-    /* Modal Styles */
+    .loading-spinner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(255,255,255,0.9);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        display: none;
+    }
+    
+    .loading-spinner.active {
+        display: flex;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #667eea;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 15px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        display: none;
+    }
+    
+    .modal.active {
+        display: flex;
+    }
+    
+    .modal-content {
+        background: white;
+        border-radius: 10px;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    }
+    
     .modal-header {
         padding: 20px;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid #eee;
         display: flex;
         justify-content: space-between;
         align-items: center;
@@ -88,95 +112,26 @@
         color: #333;
     }
     
+    .close-btn {
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #666;
+    }
+    
     .modal-body {
         padding: 20px;
     }
     
     .modal-footer {
         padding: 20px;
-        border-top: 1px solid var(--border);
+        border-top: 1px solid #eee;
         display: flex;
         justify-content: flex-end;
         gap: 10px;
     }
     
-    /* Quick Stats Bar */
-    .quick-stats-bar {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        background: rgba(26, 26, 46, 0.95);
-        backdrop-filter: blur(10px);
-        color: white;
-        padding: 10px 0;
-        z-index: 100;
-        border-top: 1px solid rgba(255,255,255,0.1);
-        display: none;
-    }
-    
-    @media (min-width: 768px) {
-        .quick-stats-bar {
-            display: block;
-        }
-    }
-    
-    .stats-container {
-        display: flex;
-        justify-content: space-around;
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-    
-    .stat {
-        text-align: center;
-    }
-    
-    .stat i {
-        display: block;
-        font-size: 1.2rem;
-        margin-bottom: 5px;
-        color: #667eea;
-    }
-    
-    .stat span {
-        font-size: 1.1rem;
-        font-weight: 600;
-        display: block;
-    }
-    
-    .stat small {
-        font-size: 0.8rem;
-        opacity: 0.8;
-    }
-    
-    /* Support Button */
-    .support-btn {
-        position: fixed;
-        bottom: 80px;
-        right: 30px;
-        width: 60px;
-        height: 60px;
-        border-radius: 50%;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        border: none;
-        cursor: pointer;
-        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
-        z-index: 99;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 1.5rem;
-        transition: all 0.3s;
-    }
-    
-    .support-btn:hover {
-        transform: scale(1.1);
-        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
-    }
-    
-    /* Back to Top Button */
     .back-to-top {
         position: fixed;
         bottom: 30px;
@@ -184,17 +139,17 @@
         width: 50px;
         height: 50px;
         border-radius: 50%;
-        background: white;
-        color: #333;
-        border: 2px solid var(--border);
+        background: #667eea;
+        color: white;
+        border: none;
         cursor: pointer;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        z-index: 99;
+        box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: 1.2rem;
+        font-size: 18px;
         transition: all 0.3s;
+        z-index: 100;
         opacity: 0;
         visibility: hidden;
     }
@@ -205,53 +160,59 @@
     }
     
     .back-to-top:hover {
-        background: var(--primary);
+        transform: translateY(-3px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+    }
+    
+    .btn {
+        padding: 10px 20px;
+        border-radius: 5px;
+        border: none;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s;
+    }
+    
+    .btn-primary {
+        background: #667eea;
         color: white;
-        border-color: var(--primary);
     }
     
-    /* Cookie Consent */
-    .cookie-consent {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
+    .btn-primary:hover {
+        background: #5a6fd8;
+    }
+    
+    .btn-outline {
         background: white;
-        padding: 20px;
-        box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
-        z-index: 1000;
-        display: none;
+        color: #333;
+        border: 1px solid #ddd;
     }
     
-    .cookie-consent.active {
-        display: block;
+    .btn-outline:hover {
+        background: #f5f5f5;
     }
     
-    .cookie-content {
-        max-width: 1200px;
-        margin: 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: wrap;
-        gap: 20px;
+    .btn-danger {
+        background: #f56565;
+        color: white;
     }
     
-    .cookie-text {
-        flex: 1;
-        min-width: 300px;
-    }
-    
-    .cookie-actions {
-        display: flex;
-        gap: 10px;
+    .btn-danger:hover {
+        background: #e53e3e;
     }
 </style>
 
 <script>
-    // Modal functions
     let currentModalCallback = null;
     let currentModalData = null;
+    
+    function showLoading() {
+        document.getElementById('globalSpinner').classList.add('active');
+    }
+    
+    function hideLoading() {
+        document.getElementById('globalSpinner').classList.remove('active');
+    }
     
     function showModal(title, message, confirmText = 'Confirm', callback = null, data = null) {
         document.getElementById('modalTitle').textContent = title;
@@ -285,93 +246,20 @@
         document.getElementById('alertModal').classList.remove('active');
     }
     
-    // Back to top functionality
     function scrollToTop() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     
-    window.addEventListener('scroll', debounce(function() {
+    window.addEventListener('scroll', function() {
         const backToTop = document.querySelector('.back-to-top');
         if (window.scrollY > 300) {
             backToTop.classList.add('visible');
         } else {
             backToTop.classList.remove('visible');
         }
-    }, 100));
+    });
     
-    // Support function
-    function openSupport() {
-        showAlert('Support', 'Need help? Email us at support@quickdeploy.com or check our documentation.');
-    }
-    
-    // Update stats periodically
-    function updateLiveStats() {
-        fetch('/api/stats')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('liveDeployments').textContent = data.activeDeployments;
-                    document.getElementById('storageUsed').textContent = 
-                        (data.totalSize / 1024 / 1024).toFixed(2) + ' MB';
-                    document.getElementById('uptime').textContent = '100%';
-                    document.getElementById('activeUsers').textContent = data.activeUsers || 1;
-                }
-            })
-            .catch(console.error);
-    }
-    
-    // Update stats every 30 seconds
-    setInterval(updateLiveStats, 30000);
-    
-    // Initial stats update
-    setTimeout(updateLiveStats, 1000);
-    
-    // Cookie consent
-    function checkCookieConsent() {
-        if (!localStorage.getItem('cookiesAccepted')) {
-            setTimeout(() => {
-                const cookieConsent = document.createElement('div');
-                cookieConsent.className = 'cookie-consent active';
-                cookieConsent.innerHTML = `
-                    <div class="cookie-content">
-                        <div class="cookie-text">
-                            <h4>🍪 We use cookies</h4>
-                            <p>We use cookies to enhance your experience, analyze traffic, and serve personalized content. By continuing to use our site, you consent to our use of cookies.</p>
-                        </div>
-                        <div class="cookie-actions">
-                            <button onclick="acceptCookies()" class="btn btn-primary">Accept All</button>
-                            <button onclick="rejectCookies()" class="btn btn-outline">Reject</button>
-                        </div>
-                    </div>
-                `;
-                document.body.appendChild(cookieConsent);
-            }, 2000);
-        }
-    }
-    
-    function acceptCookies() {
-        localStorage.setItem('cookiesAccepted', 'true');
-        document.querySelector('.cookie-consent').remove();
-        toastr.success('Cookie preferences saved!');
-    }
-    
-    function rejectCookies() {
-        localStorage.setItem('cookiesAccepted', 'false');
-        document.querySelector('.cookie-consent').remove();
-        toastr.info('Cookie preferences saved.');
-    }
-    
-    // Initialize when DOM is loaded
     document.addEventListener('DOMContentLoaded', function() {
-        // Check cookie consent
-        checkCookieConsent();
-        
-        // Initialize tooltips
-        document.querySelectorAll('[data-tooltip]').forEach(el => {
-            el.title = el.getAttribute('data-tooltip');
-        });
-        
-        // Add click outside to close modals
         document.addEventListener('click', function(e) {
             if (e.target.classList.contains('modal')) {
                 closeModal();
@@ -379,71 +267,16 @@
             }
         });
         
-        // Keyboard shortcuts
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeModal();
                 closeAlert();
             }
-            
-            // Ctrl/Cmd + K for search
-            if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-                e.preventDefault();
-                document.querySelector('input[type="search"]')?.focus();
-            }
         });
-        
-        // Service worker registration for PWA (optional)
-        if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(reg => console.log('Service Worker registered'))
-                .catch(err => console.log('Service Worker registration failed:', err));
-        }
     });
     
-    // Utility function to format bytes
-    function formatBytes(bytes, decimals = 2) {
-        if (bytes === 0) return '0 Bytes';
-        const k = 1024;
-        const dm = decimals < 0 ? 0 : decimals;
-        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
-    }
-    
-    // Utility function to format date
-    function formatDate(date, format = 'relative') {
-        const d = new Date(date);
-        if (format === 'relative') {
-            const now = new Date();
-            const diff = now - d;
-            const minutes = Math.floor(diff / 60000);
-            const hours = Math.floor(diff / 3600000);
-            const days = Math.floor(diff / 86400000);
-            
-            if (minutes < 1) return 'Just now';
-            if (minutes < 60) return `${minutes}m ago`;
-            if (hours < 24) return `${hours}h ago`;
-            if (days < 7) return `${days}d ago`;
-            return d.toLocaleDateString();
-        }
-        return d.toLocaleString();
-    }
-    
-    // Export utilities to window
-    window.formatBytes = formatBytes;
-    window.formatDate = formatDate;
     window.showModal = showModal;
     window.showAlert = showAlert;
+    window.showLoading = showLoading;
+    window.hideLoading = hideLoading;
 </script>
-
-<!-- Analytics (Optional - Add your own tracking code) -->
-<!--
-<script>
-    // Example: Google Analytics
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-    gtag('config', 'YOUR-GA-ID');
-</script>
--->
