@@ -4,6 +4,7 @@ simple-vercel/
 │   ├── index.ejs
 │   ├── admin.ejs
 │   ├── deployment.ejs
+│   ├── error.ejs
 │   └── partials/
 │       ├── header.ejs
 │       └── footer.ejs

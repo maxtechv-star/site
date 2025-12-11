@@ -1,38 +1,20 @@
-/**
- * QuickDeploy - Main Server File
- * 
- * A simplified Vercel-like static site deployment platform
- */
-
 require('dotenv').config();
-
-// ============================================================================
-// Imports
-// ============================================================================
 
 const express = require('express');
 const path = require('path');
-const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 const multer = require('multer');
-const archiver = require('archiver');
-const unzipper = require('unzipper');
-const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
+const MemoryStore = require('memorystore')(session);
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
 const cors = require('cors');
 const methodOverride = require('method-override');
 const moment = require('moment');
-const winston = require('winston');
-const mime = require('mime-types');
-
-// ============================================================================
-// Configuration
-// ============================================================================
+const NodeCache = require('node-cache');
+const { createClient } = require('@supabase/supabase-js');
 
 const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
 const isProduction = process.env.NODE_ENV === 'production';
@@ -42,111 +24,61 @@ const config = {
     env: process.env.NODE_ENV || 'development',
     baseUrl: isVercel ? `https://${process.env.VERCEL_URL}` : (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`),
     
-    // Database
-    databaseUrl: process.env.DATABASE_URL,
+    supabaseUrl: process.env.SUPABASE_URL,
+    supabaseAnonKey: process.env.SUPABASE_ANON_KEY,
+    supabaseServiceKey: process.env.SUPABASE_SERVICE_KEY,
     
-    // File storage - use /tmp on Vercel for write permissions
-    uploadPath: isVercel ? '/tmp/uploads' : (process.env.UPLOAD_PATH || './uploads'),
-    deploymentPath: isVercel ? '/tmp/deployments' : (process.env.DEPLOYMENT_PATH || './deployments'),
-    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024, // 100MB
-    maxFiles: parseInt(process.env.MAX_FILES) || 50,
-    
-    // Security
     sessionSecret: process.env.SESSION_SECRET || 'quickdeploy-secret-key-change-in-production',
     adminPassword: process.env.ADMIN_PASSWORD || 'admin123',
     
-    // Deployment
+    maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024,
+    maxFiles: parseInt(process.env.MAX_FILES) || 50,
+    
     defaultExpiryDays: parseInt(process.env.DEFAULT_EXPIRY_DAYS) || 7,
     maxExpiryDays: parseInt(process.env.MAX_EXPIRY_DAYS) || 30,
     
-    // Allowed file types
     allowedFileTypes: (process.env.ALLOWED_FILE_TYPES || '.html,.css,.js,.json,.png,.jpg,.jpeg,.gif,.svg,.webp,.ico,.woff,.woff2,.ttf,.otf,.txt,.md,.pdf,.zip')
         .split(',')
         .map(ext => ext.trim().toLowerCase()),
     
-    // Rate limiting
     rateLimitWindow: parseInt(process.env.RATE_LIMIT_WINDOW) || 15,
     rateLimitMax: parseInt(process.env.RATE_LIMIT_MAX) || 100,
 };
 
-// ============================================================================
-// Logger Setup (Vercel compatible)
-// ============================================================================
-
-// Only create logs directory if we're not on Vercel
-let logger;
-if (isVercel) {
-    // Simple console logger for Vercel
-    logger = {
-        info: (...args) => console.log('[INFO]', ...args),
-        error: (...args) => console.error('[ERROR]', ...args),
-        warn: (...args) => console.warn('[WARN]', ...args),
-        debug: (...args) => console.debug('[DEBUG]', ...args)
-    };
-} else {
-    // Full Winston logger for local development
-    const logDir = path.join(__dirname, 'logs');
-    if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
+if (!config.supabaseUrl || !config.supabaseServiceKey) {
+    console.error('❌ Supabase configuration missing!');
+    console.error('Add to .env:');
+    console.error('SUPABASE_URL=https://muigampswuqdswbulgjg.supabase.co');
+    console.error('SUPABASE_SERVICE_KEY=your-service-role-key');
+    if (isVercel) {
+        console.error('Also add these to Vercel Environment Variables');
     }
-
-    logger = winston.createLogger({
-        level: process.env.LOG_LEVEL || 'info',
-        format: winston.format.combine(
-            winston.format.timestamp(),
-            winston.format.errors({ stack: true }),
-            winston.format.json()
-        ),
-        defaultMeta: { service: 'quickdeploy' },
-        transports: [
-            new winston.transports.File({ 
-                filename: path.join(logDir, 'error.log'), 
-                level: 'error' 
-            }),
-            new winston.transports.File({ 
-                filename: path.join(logDir, 'combined.log') 
-            }),
-            new winston.transports.Console({
-                format: winston.format.combine(
-                    winston.format.colorize(),
-                    winston.format.simple()
-                )
-            })
-        ]
-    });
+    if (!isVercel) process.exit(1);
 }
 
-// ============================================================================
-// Database Setup
-// ============================================================================
+const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
 
-const pool = new Pool({
-    connectionString: config.databaseUrl,
-    ssl: isProduction ? { rejectUnauthorized: false } : false,
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 2000,
-});
-
-// Test database connection
-pool.connect()
-    .then(client => {
-        logger.info('✅ Database connected successfully');
-        client.release();
-    })
-    .catch(err => {
-        logger.error('❌ Database connection failed:', err.message);
-        // Don't exit on Vercel - let the server start anyway
+async function testSupabaseConnection() {
+    try {
+        const { data, error } = await supabase.from('deployments').select('count').limit(1);
+        if (error) {
+            if (!error.message.includes('does not exist')) {
+                throw error;
+            }
+        }
+        console.log('✅ Supabase connection successful');
+        return true;
+    } catch (error) {
+        console.error('❌ Supabase connection failed:', error.message);
         if (!isVercel) process.exit(1);
-    });
+        return false;
+    }
+}
 
-// ============================================================================
-// Express App Setup
-// ============================================================================
+const cache = new NodeCache({ stdTTL: 600 });
 
 const app = express();
 
-// Security middleware - disable CSP on Vercel for static files
 if (isVercel) {
     app.use(helmet({
         contentSecurityPolicy: false
@@ -165,118 +97,49 @@ if (isVercel) {
     }));
 }
 
-// Compression
 app.use(compression());
 
-// CORS
 app.use(cors({
     origin: config.env === 'development' ? true : process.env.CORS_ORIGIN,
     credentials: true
 }));
 
-// Body parsing
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Method override for DELETE, PUT
 app.use(methodOverride('_method'));
 
-// Static files
 app.use(express.static(path.join(__dirname, 'public')));
-app.use('/static', express.static(config.deploymentPath));
 
-// Rate limiting - disable on Vercel if needed
-if (!isVercel) {
-    const limiter = rateLimit({
-        windowMs: config.rateLimitWindow * 60 * 1000,
-        max: config.rateLimitMax,
-        message: { error: 'Too many requests, please try again later.' },
-        standardHeaders: true,
-        legacyHeaders: false,
-    });
-    app.use('/api/', limiter);
-}
+const limiter = rateLimit({
+    windowMs: config.rateLimitWindow * 60 * 1000,
+    max: config.rateLimitMax,
+    message: { error: 'Too many requests, please try again later.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+app.use('/api/', limiter);
 
-// Session middleware - use memory store on Vercel for simplicity
-if (isVercel) {
-    app.use(session({
-        secret: config.sessionSecret,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            secure: true,
-            httpOnly: true,
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-            sameSite: 'lax'
-        }
-    }));
-} else {
-    app.use(session({
-        store: new pgSession({
-            pool: pool,
-            tableName: 'session',
-            createTableIfMissing: true
-        }),
-        secret: config.sessionSecret,
-        resave: false,
-        saveUninitialized: false,
-        cookie: {
-            secure: config.env === 'production',
-            httpOnly: true,
-            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-            sameSite: 'lax'
-        }
-    }));
-}
+app.use(session({
+    store: new MemoryStore({
+        checkPeriod: 86400000
+    }),
+    secret: config.sessionSecret,
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: isProduction,
+        httpOnly: true,
+        maxAge: 30 * 24 * 60 * 60 * 1000,
+        sameSite: 'lax'
+    }
+}));
 
-// View engine setup
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-// ============================================================================
-// File Upload Configuration
-// ============================================================================
-
-// Ensure upload directories exist
-try {
-    [config.uploadPath, config.deploymentPath].forEach(dir => {
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-            logger.info(`Created directory: ${dir}`);
-        }
-    });
-} catch (error) {
-    logger.error('Failed to create directories:', error);
-    // Continue anyway on Vercel
-    if (!isVercel) throw error;
-}
-
-// Configure multer for file uploads
-const uploadStorage = multer.diskStorage({
-    destination: (req, file, cb) => {
-        const uploadId = uuidv4();
-        req.uploadId = uploadId;
-        const uploadDir = path.join(config.uploadPath, uploadId);
-        
-        try {
-            if (!fs.existsSync(uploadDir)) {
-                fs.mkdirSync(uploadDir, { recursive: true });
-            }
-            cb(null, uploadDir);
-        } catch (error) {
-            logger.error('Failed to create upload directory:', error);
-            cb(error);
-        }
-    },
-    filename: (req, file, cb) => {
-        // Sanitize filename
-        const sanitizedName = file.originalname.replace(/[^a-zA-Z0-9.\-_]/g, '_');
-        cb(null, sanitizedName);
-    }
-});
-
 const upload = multer({
-    storage: uploadStorage,
+    storage: multer.memoryStorage(),
     limits: {
         fileSize: config.maxFileSize,
         files: config.maxFiles
@@ -292,13 +155,6 @@ const upload = multer({
     }
 });
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-/**
- * Get file icon based on extension
- */
 function getFileIcon(filename) {
     const ext = path.extname(filename).toLowerCase();
     const iconMap = {
@@ -328,9 +184,6 @@ function getFileIcon(filename) {
     return iconMap[ext] || iconMap.default;
 }
 
-/**
- * Format bytes to human readable format
- */
 function formatBytes(bytes, decimals = 2) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -340,154 +193,119 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
 }
 
-/**
- * Recursively get all files in a directory
- */
-function getAllFiles(dirPath, arrayOfFiles = []) {
-    try {
-        if (!fs.existsSync(dirPath)) return arrayOfFiles;
-        
-        const files = fs.readdirSync(dirPath);
-        
-        files.forEach(file => {
-            const fullPath = path.join(dirPath, file);
-            try {
-                if (fs.statSync(fullPath).isDirectory()) {
-                    arrayOfFiles = getAllFiles(fullPath, arrayOfFiles);
-                } else {
-                    arrayOfFiles.push({
-                        path: fullPath,
-                        name: file,
-                        size: fs.statSync(fullPath).size,
-                        relativePath: path.relative(dirPath, fullPath)
-                    });
-                }
-            } catch (error) {
-                logger.error(`Error reading file ${fullPath}:`, error);
-            }
-        });
-    } catch (error) {
-        logger.error(`Error reading directory ${dirPath}:`, error);
-    }
+function getMimeType(filename) {
+    const mimeTypes = {
+        '.html': 'text/html',
+        '.htm': 'text/html',
+        '.css': 'text/css',
+        '.js': 'application/javascript',
+        '.json': 'application/json',
+        '.png': 'image/png',
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.gif': 'image/gif',
+        '.svg': 'image/svg+xml',
+        '.webp': 'image/webp',
+        '.ico': 'image/x-icon',
+        '.woff': 'font/woff',
+        '.woff2': 'font/woff2',
+        '.ttf': 'font/ttf',
+        '.otf': 'font/otf',
+        '.zip': 'application/zip',
+        '.txt': 'text/plain',
+        '.md': 'text/markdown',
+        '.pdf': 'application/pdf',
+    };
     
-    return arrayOfFiles;
+    const ext = path.extname(filename).toLowerCase();
+    return mimeTypes[ext] || 'application/octet-stream';
 }
 
-/**
- * Validate deployment name
- */
 function isValidDeploymentName(name) {
     return /^[a-zA-Z0-9\s\-_]+$/.test(name) && name.length >= 1 && name.length <= 100;
 }
 
-/**
- * Log activity to database
- */
 async function logActivity(level, message, userId = null, deploymentId = null, req = null) {
     try {
-        await pool.query(`
-            INSERT INTO logs (level, message, user_id, deployment_id, ip_address, user_agent, metadata)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-        `, [
+        await supabase.from('logs').insert({
             level,
             message,
-            userId,
-            deploymentId,
-            req?.ip || null,
-            req?.get('User-Agent') || null,
-            JSON.stringify({ url: req?.originalUrl, method: req?.method })
-        ]);
+            user_id: userId,
+            deployment_id: deploymentId,
+            ip_address: req?.ip || null,
+            user_agent: req?.get('User-Agent') || null,
+            metadata: { url: req?.originalUrl, method: req?.method }
+        });
     } catch (error) {
-        logger.error('Failed to log activity:', error);
+        console.error('Failed to log activity:', error);
     }
 }
 
-// ============================================================================
-// Middleware
-// ============================================================================
-
-/**
- * Check if user is authenticated (for future use)
- */
-async function requireAuth(req, res, next) {
-    // For now, allow all access (no login required)
-    // This can be enhanced later for authentication
-    next();
-}
-
-/**
- * Check if user is admin (for future use)
- */
-async function requireAdmin(req, res, next) {
-    // For now, allow all access
-    // This can be enhanced later for admin authentication
-    next();
-}
-
-/**
- * Add common variables to all views
- */
 app.use((req, res, next) => {
     res.locals.currentPage = req.path.split('/')[1] || 'home';
     res.locals.baseUrl = config.baseUrl;
     res.locals.title = 'QuickDeploy';
     res.locals.messages = req.session.messages || {};
     delete req.session.messages;
+    res.locals.formatBytes = formatBytes;
+    res.locals.getFileIcon = getFileIcon;
     next();
 });
 
-// ============================================================================
-// Routes
-// ============================================================================
-
-// ============================================
-// View Routes
-// ============================================
-
-/**
- * Home page
- */
 app.get('/', async (req, res) => {
     try {
-        // Get recent deployments
-        const deploymentsResult = await pool.query(`
-            SELECT * FROM deployments 
-            WHERE status = 'active' 
-            ORDER BY created_at DESC 
-            LIMIT 10
-        `);
+        const cacheKey = 'recent_deployments';
+        let recentDeployments = cache.get(cacheKey);
+        let stats = cache.get('stats');
         
-        // Get system stats
-        const statsResult = await pool.query(`
-            SELECT 
-                COUNT(*) as total_deployments,
-                COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as active_deployments,
-                COALESCE(SUM(total_size), 0) as total_size,
-                COALESCE(SUM(file_count), 0) as total_files,
-                COUNT(*) FILTER (WHERE expires_at < CURRENT_TIMESTAMP AND expires_at > CURRENT_TIMESTAMP - INTERVAL '1 day') as expiring_soon
-            FROM deployments
-            WHERE status != 'deleted'
-        `);
+        if (!recentDeployments) {
+            const { data, error } = await supabase
+                .from('deployments')
+                .select('*')
+                .eq('status', 'active')
+                .order('created_at', { ascending: false })
+                .limit(10);
+            
+            if (error) throw error;
+            recentDeployments = data || [];
+            cache.set(cacheKey, recentDeployments, 60);
+        }
         
-        const stats = statsResult.rows[0] || {
-            total_deployments: 0,
-            active_deployments: 0,
-            total_size: 0,
-            total_files: 0,
-            expiring_soon: 0
-        };
+        if (!stats) {
+            const { data: deploymentsData, error: deploymentsError } = await supabase
+                .from('deployments')
+                .select('total_size, file_count, expires_at');
+            
+            if (deploymentsError) throw deploymentsError;
+            
+            const now = new Date();
+            const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+            
+            stats = {
+                total_deployments: deploymentsData?.length || 0,
+                active_deployments: deploymentsData?.filter(d => new Date(d.expires_at) > now).length || 0,
+                total_size: deploymentsData?.reduce((sum, d) => sum + (d.total_size || 0), 0) || 0,
+                total_files: deploymentsData?.reduce((sum, d) => sum + (d.file_count || 0), 0) || 0,
+                expiring_soon: deploymentsData?.filter(d => {
+                    const exp = new Date(d.expires_at);
+                    return exp > now && exp < tomorrow;
+                }).length || 0
+            };
+            
+            cache.set('stats', stats, 300);
+        }
         
         res.render('index', {
             title: 'Dashboard',
-            recentDeployments: deploymentsResult.rows,
-            stats: stats,
-            deploymentsCount: deploymentsResult.rows.length
+            recentDeployments,
+            stats,
+            deploymentsCount: recentDeployments.length
         });
         
         await logActivity('info', 'Accessed dashboard', null, null, req);
         
     } catch (error) {
-        logger.error('Error loading dashboard:', error);
+        console.error('Error loading dashboard:', error);
         res.status(500).render('error', { 
             title: 'Error',
             message: 'Failed to load dashboard',
@@ -496,62 +314,46 @@ app.get('/', async (req, res) => {
     }
 });
 
-/**
- * Upload page
- */
 app.get('/upload', (req, res) => {
     const uploadType = req.query.type || 'files';
     res.render('upload', {
         title: 'New Deployment',
-        uploadType: uploadType,
+        uploadType,
         maxFileSize: formatBytes(config.maxFileSize),
         allowedFileTypes: config.allowedFileTypes.join(', ')
     });
 });
 
-/**
- * Admin panel
- */
-app.get('/admin', requireAdmin, async (req, res) => {
+app.get('/admin', async (req, res) => {
     try {
-        // Get all deployments
-        const deploymentsResult = await pool.query(`
-            SELECT * FROM deployments 
-            WHERE status != 'deleted'
-            ORDER BY created_at DESC
-        `);
+        const { data: deployments, error: deploymentsError } = await supabase
+            .from('deployments')
+            .select('*')
+            .neq('status', 'deleted')
+            .order('created_at', { ascending: false });
         
-        // Get admin stats
-        const statsResult = await pool.query(`
-            SELECT 
-                COUNT(*) as total_deployments,
-                COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as active_deployments,
-                COUNT(*) FILTER (WHERE expires_at < CURRENT_TIMESTAMP) as expired_deployments,
-                COALESCE(SUM(total_size), 0) as total_storage,
-                COUNT(DISTINCT created_at::DATE) as active_days
-            FROM deployments
-            WHERE status != 'deleted'
-        `);
+        if (deploymentsError) throw deploymentsError;
         
-        const adminStats = statsResult.rows[0] || {
-            total_deployments: 0,
-            active_deployments: 0,
-            expired_deployments: 0,
-            total_storage: 0,
-            active_days: 0
+        const now = new Date();
+        const adminStats = {
+            total_deployments: deployments?.length || 0,
+            active_deployments: deployments?.filter(d => new Date(d.expires_at) > now).length || 0,
+            expired_deployments: deployments?.filter(d => new Date(d.expires_at) <= now).length || 0,
+            total_storage: deployments?.reduce((sum, d) => sum + (d.total_size || 0), 0) || 0,
+            active_days: new Set(deployments?.map(d => new Date(d.created_at).toDateString())).size || 0
         };
         
         res.render('admin', {
             title: 'Admin Panel',
-            allDeployments: deploymentsResult.rows,
-            adminStats: adminStats,
-            deploymentsCount: deploymentsResult.rows.length
+            allDeployments: deployments || [],
+            adminStats,
+            deploymentsCount: deployments?.length || 0
         });
         
         await logActivity('info', 'Accessed admin panel', null, null, req);
         
     } catch (error) {
-        logger.error('Error loading admin panel:', error);
+        console.error('Error loading admin panel:', error);
         res.status(500).render('error', { 
             title: 'Error',
             message: 'Failed to load admin panel',
@@ -560,20 +362,17 @@ app.get('/admin', requireAdmin, async (req, res) => {
     }
 });
 
-/**
- * Deployment details page
- */
 app.get('/deployment/:id', async (req, res) => {
     try {
         const deploymentId = req.params.id;
         
-        // Get deployment details
-        const deploymentResult = await pool.query(
-            'SELECT * FROM deployments WHERE id = $1',
-            [deploymentId]
-        );
+        const { data: deployment, error: deploymentError } = await supabase
+            .from('deployments')
+            .select('*')
+            .eq('id', deploymentId)
+            .single();
         
-        if (deploymentResult.rows.length === 0) {
+        if (deploymentError || !deployment) {
             return res.status(404).render('error', {
                 title: 'Not Found',
                 message: 'Deployment not found',
@@ -581,30 +380,24 @@ app.get('/deployment/:id', async (req, res) => {
             });
         }
         
-        const deployment = deploymentResult.rows[0];
+        const { data: files, error: filesError } = await supabase
+            .from('deployment_files')
+            .select('*')
+            .eq('deployment_id', deploymentId)
+            .order('file_path');
         
-        // Get deployment files
-        const filesResult = await pool.query(
-            'SELECT * FROM deployment_files WHERE deployment_id = $1 ORDER BY file_path',
-            [deploymentId]
-        );
-        
-        // Get deployment path
-        const deploymentPath = path.join(config.deploymentPath, deploymentId);
+        if (filesError) throw filesError;
         
         res.render('deployment', {
             title: deployment.name || 'Deployment',
-            deployment: deployment,
-            files: filesResult.rows,
-            deploymentPath: deploymentPath,
-            formatBytes: formatBytes,
-            getFileIcon: getFileIcon
+            deployment,
+            files: files || []
         });
         
         await logActivity('info', `Viewed deployment ${deploymentId}`, null, deploymentId, req);
         
     } catch (error) {
-        logger.error('Error loading deployment:', error);
+        console.error('Error loading deployment:', error);
         res.status(500).render('error', {
             title: 'Error',
             message: 'Failed to load deployment',
@@ -613,97 +406,35 @@ app.get('/deployment/:id', async (req, res) => {
     }
 });
 
-/**
- * All deployments page
- */
-app.get('/deployments', async (req, res) => {
-    try {
-        const page = parseInt(req.query.page) || 1;
-        const limit = parseInt(req.query.limit) || 20;
-        const offset = (page - 1) * limit;
-        const status = req.query.status || 'all';
-        
-        let query = `
-            SELECT * FROM deployments 
-            WHERE status != 'deleted'
-        `;
-        
-        let countQuery = `
-            SELECT COUNT(*) as total FROM deployments 
-            WHERE status != 'deleted'
-        `;
-        
-        const queryParams = [];
-        const countParams = [];
-        
-        if (status !== 'all') {
-            if (status === 'active') {
-                query += ' AND expires_at > CURRENT_TIMESTAMP';
-                countQuery += ' AND expires_at > CURRENT_TIMESTAMP';
-            } else if (status === 'expired') {
-                query += ' AND expires_at < CURRENT_TIMESTAMP';
-                countQuery += ' AND expires_at < CURRENT_TIMESTAMP';
-            }
-        }
-        
-        query += ' ORDER BY created_at DESC LIMIT $1 OFFSET $2';
-        queryParams.push(limit, offset);
-        
-        const [deploymentsResult, countResult] = await Promise.all([
-            pool.query(query, queryParams),
-            pool.query(countQuery, countParams)
-        ]);
-        
-        const total = parseInt(countResult.rows[0].total);
-        const totalPages = Math.ceil(total / limit);
-        
-        res.render('deployments', {
-            title: 'All Deployments',
-            deployments: deploymentsResult.rows,
-            currentPage: page,
-            totalPages: totalPages,
-            limit: limit,
-            status: status,
-            formatBytes: formatBytes
-        });
-        
-    } catch (error) {
-        logger.error('Error loading deployments:', error);
-        res.status(500).render('error', {
-            title: 'Error',
-            message: 'Failed to load deployments',
-            status: 500
-        });
-    }
-});
-
-// ============================================
-// API Routes
-// ============================================
-
-/**
- * Get system stats
- */
 app.get('/api/stats', async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT 
-                COUNT(*) as totalDeployments,
-                COUNT(*) FILTER (WHERE expires_at > CURRENT_TIMESTAMP) as activeDeployments,
-                COALESCE(SUM(total_size), 0) as totalSize,
-                COALESCE(SUM(file_count), 0) as totalFiles,
-                COUNT(*) FILTER (WHERE expires_at < CURRENT_TIMESTAMP AND expires_at > CURRENT_TIMESTAMP - INTERVAL '1 day') as expiringSoon
-            FROM deployments
-            WHERE status != 'deleted'
-        `);
+        const { data: deployments, error } = await supabase
+            .from('deployments')
+            .select('total_size, file_count, expires_at');
+        
+        if (error) throw error;
+        
+        const now = new Date();
+        const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+        
+        const stats = {
+            totalDeployments: deployments?.length || 0,
+            activeDeployments: deployments?.filter(d => new Date(d.expires_at) > now).length || 0,
+            totalSize: deployments?.reduce((sum, d) => sum + (d.total_size || 0), 0) || 0,
+            totalFiles: deployments?.reduce((sum, d) => sum + (d.file_count || 0), 0) || 0,
+            expiringSoon: deployments?.filter(d => {
+                const exp = new Date(d.expires_at);
+                return exp > now && exp < tomorrow;
+            }).length || 0
+        };
         
         res.json({
             success: true,
-            ...result.rows[0]
+            ...stats
         });
         
     } catch (error) {
-        logger.error('Error getting stats:', error);
+        console.error('Error getting stats:', error);
         res.status(500).json({
             success: false,
             error: 'Failed to get system stats'
@@ -711,374 +442,183 @@ app.get('/api/stats', async (req, res) => {
     }
 });
 
-/**
- * Get all deployments
- */
-app.get('/api/deployments', async (req, res) => {
+app.post('/api/upload', upload.array('files'), async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT * FROM deployments 
-            WHERE status = 'active' 
-            ORDER BY created_at DESC
-        `);
+        const deploymentId = uuidv4();
+        const deploymentName = req.body.name || `Deployment-${Date.now()}`;
+        const deploymentDesc = req.body.description || '';
+        const expiryDays = parseInt(req.body.expiryDays) || config.defaultExpiryDays;
+        
+        if (!isValidDeploymentName(deploymentName)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid deployment name'
+            });
+        }
+        
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + Math.min(expiryDays, config.maxExpiryDays));
+        
+        let totalSize = 0;
+        const fileRecords = [];
+        
+        for (const file of req.files) {
+            const filePath = `${deploymentId}/${file.originalname}`;
+            
+            const { data, error } = await supabase.storage
+                .from('deployments')
+                .upload(filePath, file.buffer, {
+                    contentType: file.mimetype,
+                    upsert: true
+                });
+            
+            if (error) throw error;
+            
+            totalSize += file.size;
+            fileRecords.push({
+                deployment_id: deploymentId,
+                file_path: file.originalname,
+                original_name: file.originalname,
+                file_size: file.size,
+                mime_type: file.mimetype,
+                storage_path: data.path
+            });
+        }
+        
+        const deploymentUrl = `${config.supabaseUrl}/storage/v1/object/public/deployments/${deploymentId}`;
+        const adminUrl = `${config.baseUrl}/deployment/${deploymentId}`;
+        
+        const { data: deployment, error: deploymentError } = await supabase
+            .from('deployments')
+            .insert({
+                id: deploymentId,
+                name: deploymentName,
+                description: deploymentDesc,
+                url: deploymentUrl,
+                admin_url: adminUrl,
+                file_count: fileRecords.length,
+                total_size: totalSize,
+                expires_at: expiresAt.toISOString(),
+                status: 'active'
+            })
+            .select()
+            .single();
+        
+        if (deploymentError) throw deploymentError;
+        
+        if (fileRecords.length > 0) {
+            const { error: filesError } = await supabase
+                .from('deployment_files')
+                .insert(fileRecords);
+            
+            if (filesError) throw filesError;
+        }
+        
+        cache.del('recent_deployments');
+        cache.del('stats');
+        
+        await logActivity('info', `Created deployment ${deploymentId}`, null, deploymentId, req);
         
         res.json({
             success: true,
-            deployments: result.rows
+            deploymentId,
+            url: deploymentUrl,
+            adminUrl,
+            fileCount: fileRecords.length,
+            totalSize,
+            message: 'Deployment created successfully'
         });
         
     } catch (error) {
-        logger.error('Error getting deployments:', error);
+        console.error('Upload error:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to get deployments'
+            error: error.message || 'Upload failed'
         });
     }
 });
 
-/**
- * Get single deployment
- */
 app.get('/api/deployments/:id', async (req, res) => {
     try {
-        const result = await pool.query(
-            'SELECT * FROM deployments WHERE id = $1',
-            [req.params.id]
-        );
+        const { data: deployment, error: deploymentError } = await supabase
+            .from('deployments')
+            .select('*')
+            .eq('id', req.params.id)
+            .single();
         
-        if (result.rows.length === 0) {
+        if (deploymentError || !deployment) {
             return res.status(404).json({
                 success: false,
                 error: 'Deployment not found'
             });
         }
         
-        // Get deployment files
-        const filesResult = await pool.query(
-            'SELECT * FROM deployment_files WHERE deployment_id = $1',
-            [req.params.id]
-        );
+        const { data: files, error: filesError } = await supabase
+            .from('deployment_files')
+            .select('*')
+            .eq('deployment_id', req.params.id);
+        
+        if (filesError) throw filesError;
         
         res.json({
             success: true,
-            deployment: result.rows[0],
-            files: filesResult.rows
+            deployment,
+            files: files || []
         });
         
     } catch (error) {
-        logger.error('Error getting deployment:', error);
+        console.error('Error getting deployment:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to get deployment'
+            error: error.message || 'Failed to get deployment'
         });
     }
 });
 
-/**
- * Upload files
- */
-app.post('/api/upload', upload.array('files'), async (req, res) => {
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN');
-        
-        const deploymentId = `deploy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const deploymentName = req.body.name || `Deployment-${Date.now()}`;
-        const deploymentDesc = req.body.description || '';
-        
-        // Validate deployment name
-        if (!isValidDeploymentName(deploymentName)) {
-            throw new Error('Invalid deployment name');
-        }
-        
-        // Create deployment directory
-        const deploymentDir = path.join(config.deploymentPath, deploymentId);
-        if (!fs.existsSync(deploymentDir)) {
-            fs.mkdirSync(deploymentDir, { recursive: true });
-        }
-        
-        // Move files from upload directory to deployment directory
-        const uploadDir = path.join(config.uploadPath, req.uploadId);
-        const files = getAllFiles(uploadDir);
-        
-        let totalSize = 0;
-        const fileRecords = [];
-        
-        for (const file of files) {
-            const destPath = path.join(deploymentDir, file.relativePath);
-            const destDir = path.dirname(destPath);
-            
-            if (!fs.existsSync(destDir)) {
-                fs.mkdirSync(destDir, { recursive: true });
-            }
-            
-            fs.copyFileSync(file.path, destPath);
-            
-            totalSize += file.size;
-            fileRecords.push({
-                deployment_id: deploymentId,
-                file_path: file.relativePath,
-                original_name: file.name,
-                file_size: file.size,
-                mime_type: mime.lookup(file.name) || 'application/octet-stream'
-            });
-        }
-        
-        // Calculate expiry date
-        const expiryDays = parseInt(req.body.expiryDays) || config.defaultExpiryDays;
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + Math.min(expiryDays, config.maxExpiryDays));
-        
-        // Create deployment record
-        const deploymentUrl = `${config.baseUrl}/static/${deploymentId}`;
-        const adminUrl = `${config.baseUrl}/deployment/${deploymentId}`;
-        
-        await client.query(`
-            INSERT INTO deployments (id, name, description, url, admin_url, file_count, total_size, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [
-            deploymentId,
-            deploymentName,
-            deploymentDesc,
-            deploymentUrl,
-            adminUrl,
-            files.length,
-            totalSize,
-            expiresAt
-        ]);
-        
-        // Insert file records
-        for (const fileRecord of fileRecords) {
-            await client.query(`
-                INSERT INTO deployment_files (deployment_id, file_path, original_name, file_size, mime_type)
-                VALUES ($1, $2, $3, $4, $5)
-            `, [
-                fileRecord.deployment_id,
-                fileRecord.file_path,
-                fileRecord.original_name,
-                fileRecord.file_size,
-                fileRecord.mime_type
-            ]);
-        }
-        
-        // Clean up upload directory
-        if (fs.existsSync(uploadDir)) {
-            fs.rmSync(uploadDir, { recursive: true, force: true });
-        }
-        
-        await client.query('COMMIT');
-        
-        // Log activity
-        await logActivity('info', `Created deployment ${deploymentId}`, null, deploymentId, req);
-        
-        res.json({
-            success: true,
-            deploymentId: deploymentId,
-            url: deploymentUrl,
-            adminUrl: adminUrl,
-            fileCount: files.length,
-            totalSize: totalSize,
-            message: 'Deployment created successfully'
-        });
-        
-    } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('Upload error:', error);
-        
-        // Clean up any uploaded files
-        if (req.uploadId) {
-            const uploadDir = path.join(config.uploadPath, req.uploadId);
-            if (fs.existsSync(uploadDir)) {
-                fs.rmSync(uploadDir, { recursive: true, force: true });
-            }
-        }
-        
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Upload failed'
-        });
-    } finally {
-        client.release();
-    }
-});
-
-/**
- * Upload ZIP file
- */
-app.post('/api/upload-zip', upload.single('zipFile'), async (req, res) => {
-    const client = await pool.connect();
-    
-    try {
-        if (!req.file) {
-            throw new Error('No ZIP file provided');
-        }
-        
-        if (!req.file.originalname.endsWith('.zip')) {
-            throw new Error('File must be a ZIP archive');
-        }
-        
-        await client.query('BEGIN');
-        
-        const deploymentId = `deploy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const deploymentName = req.body.name || `Deployment-${Date.now()}`;
-        const deploymentDesc = req.body.description || '';
-        
-        // Validate deployment name
-        if (!isValidDeploymentName(deploymentName)) {
-            throw new Error('Invalid deployment name');
-        }
-        
-        // Create deployment directory
-        const deploymentDir = path.join(config.deploymentPath, deploymentId);
-        if (!fs.existsSync(deploymentDir)) {
-            fs.mkdirSync(deploymentDir, { recursive: true });
-        }
-        
-        // Extract ZIP file
-        await new Promise((resolve, reject) => {
-            fs.createReadStream(req.file.path)
-                .pipe(unzipper.Extract({ path: deploymentDir }))
-                .on('close', resolve)
-                .on('error', reject);
-        });
-        
-        // Get all extracted files
-        const files = getAllFiles(deploymentDir);
-        
-        let totalSize = 0;
-        const fileRecords = [];
-        
-        for (const file of files) {
-            totalSize += file.size;
-            fileRecords.push({
-                deployment_id: deploymentId,
-                file_path: file.relativePath,
-                original_name: file.name,
-                file_size: file.size,
-                mime_type: mime.lookup(file.name) || 'application/octet-stream'
-            });
-        }
-        
-        // Calculate expiry date
-        const expiryDays = parseInt(req.body.expiryDays) || config.defaultExpiryDays;
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + Math.min(expiryDays, config.maxExpiryDays));
-        
-        // Create deployment record
-        const deploymentUrl = `${config.baseUrl}/static/${deploymentId}`;
-        const adminUrl = `${config.baseUrl}/deployment/${deploymentId}`;
-        
-        await client.query(`
-            INSERT INTO deployments (id, name, description, url, admin_url, file_count, total_size, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [
-            deploymentId,
-            deploymentName,
-            deploymentDesc,
-            deploymentUrl,
-            adminUrl,
-            files.length,
-            totalSize,
-            expiresAt
-        ]);
-        
-        // Insert file records
-        for (const fileRecord of fileRecords) {
-            await client.query(`
-                INSERT INTO deployment_files (deployment_id, file_path, original_name, file_size, mime_type)
-                VALUES ($1, $2, $3, $4, $5)
-            `, [
-                fileRecord.deployment_id,
-                fileRecord.file_path,
-                fileRecord.original_name,
-                fileRecord.file_size,
-                fileRecord.mime_type
-            ]);
-        }
-        
-        // Clean up uploaded ZIP
-        if (fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
-        
-        await client.query('COMMIT');
-        
-        // Log activity
-        await logActivity('info', `Created deployment from ZIP ${deploymentId}`, null, deploymentId, req);
-        
-        res.json({
-            success: true,
-            deploymentId: deploymentId,
-            url: deploymentUrl,
-            adminUrl: adminUrl,
-            fileCount: files.length,
-            totalSize: totalSize,
-            message: 'Deployment created from ZIP successfully'
-        });
-        
-    } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('ZIP upload error:', error);
-        
-        // Clean up any extracted files
-        if (deploymentId) {
-            const deploymentDir = path.join(config.deploymentPath, deploymentId);
-            if (fs.existsSync(deploymentDir)) {
-                fs.rmSync(deploymentDir, { recursive: true, force: true });
-            }
-        }
-        
-        // Clean up uploaded ZIP
-        if (req.file?.path && fs.existsSync(req.file.path)) {
-            fs.unlinkSync(req.file.path);
-        }
-        
-        res.status(500).json({
-            success: false,
-            error: error.message || 'ZIP upload failed'
-        });
-    } finally {
-        client.release();
-    }
-});
-
-/**
- * Delete deployment
- */
 app.delete('/api/deployments/:id', async (req, res) => {
-    const client = await pool.connect();
-    
     try {
         const deploymentId = req.params.id;
         
-        await client.query('BEGIN');
+        const { data: deployment, error: checkError } = await supabase
+            .from('deployments')
+            .select('*')
+            .eq('id', deploymentId)
+            .single();
         
-        // Check if deployment exists
-        const deploymentResult = await client.query(
-            'SELECT * FROM deployments WHERE id = $1',
-            [deploymentId]
-        );
-        
-        if (deploymentResult.rows.length === 0) {
-            throw new Error('Deployment not found');
+        if (checkError || !deployment) {
+            return res.status(404).json({
+                success: false,
+                error: 'Deployment not found'
+            });
         }
         
-        // Mark deployment as deleted
-        await client.query(
-            'UPDATE deployments SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            ['deleted', deploymentId]
-        );
+        const { error: deleteError } = await supabase
+            .from('deployments')
+            .update({ 
+                status: 'deleted',
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', deploymentId);
         
-        // Delete deployment directory
-        const deploymentDir = path.join(config.deploymentPath, deploymentId);
-        if (fs.existsSync(deploymentDir)) {
-            fs.rmSync(deploymentDir, { recursive: true, force: true });
+        if (deleteError) throw deleteError;
+        
+        const { data: files, error: filesError } = await supabase
+            .from('deployment_files')
+            .select('storage_path')
+            .eq('deployment_id', deploymentId);
+        
+        if (!filesError && files && files.length > 0) {
+            const filePaths = files.map(f => f.storage_path).filter(Boolean);
+            if (filePaths.length > 0) {
+                await supabase.storage
+                    .from('deployments')
+                    .remove(filePaths);
+            }
         }
         
-        await client.query('COMMIT');
+        cache.del('recent_deployments');
+        cache.del('stats');
         
-        // Log activity
         await logActivity('info', `Deleted deployment ${deploymentId}`, null, deploymentId, req);
         
         res.json({
@@ -1087,45 +627,44 @@ app.delete('/api/deployments/:id', async (req, res) => {
         });
         
     } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('Delete error:', error);
+        console.error('Delete error:', error);
         res.status(500).json({
             success: false,
             error: error.message || 'Failed to delete deployment'
         });
-    } finally {
-        client.release();
     }
 });
 
-/**
- * Renew deployment
- */
 app.post('/api/deployments/:id/renew', async (req, res) => {
     try {
         const deploymentId = req.params.id;
         const days = parseInt(req.body.days) || config.defaultExpiryDays;
         
-        // Calculate new expiry date
         const newExpiry = new Date();
         newExpiry.setDate(newExpiry.getDate() + Math.min(days, config.maxExpiryDays));
         
-        await pool.query(
-            'UPDATE deployments SET expires_at = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-            [newExpiry, deploymentId]
-        );
+        const { error } = await supabase
+            .from('deployments')
+            .update({ 
+                expires_at: newExpiry.toISOString(),
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', deploymentId);
         
-        // Log activity
+        if (error) throw error;
+        
+        cache.del('recent_deployments');
+        
         await logActivity('info', `Renewed deployment ${deploymentId}`, null, deploymentId, req);
         
         res.json({
             success: true,
             message: 'Deployment renewed successfully',
-            newExpiry: newExpiry
+            newExpiry
         });
         
     } catch (error) {
-        logger.error('Renew error:', error);
+        console.error('Renew error:', error);
         res.status(500).json({
             success: false,
             error: error.message || 'Failed to renew deployment'
@@ -1133,243 +672,25 @@ app.post('/api/deployments/:id/renew', async (req, res) => {
     }
 });
 
-/**
- * Clone deployment
- */
-app.post('/api/deployments/:id/clone', async (req, res) => {
-    const client = await pool.connect();
-    
-    try {
-        const originalDeploymentId = req.params.id;
-        
-        await client.query('BEGIN');
-        
-        // Get original deployment
-        const originalResult = await client.query(
-            'SELECT * FROM deployments WHERE id = $1',
-            [originalDeploymentId]
-        );
-        
-        if (originalResult.rows.length === 0) {
-            throw new Error('Original deployment not found');
-        }
-        
-        const original = originalResult.rows[0];
-        
-        // Create new deployment
-        const newDeploymentId = `deploy-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-        const newDeploymentName = `${original.name} (Copy)`;
-        
-        // Calculate expiry date
-        const expiresAt = new Date();
-        expiresAt.setDate(expiresAt.getDate() + config.defaultExpiryDays);
-        
-        // Create new deployment directory
-        const newDeploymentDir = path.join(config.deploymentPath, newDeploymentId);
-        const originalDeploymentDir = path.join(config.deploymentPath, originalDeploymentId);
-        
-        if (!fs.existsSync(newDeploymentDir)) {
-            fs.mkdirSync(newDeploymentDir, { recursive: true });
-        }
-        
-        // Copy files
-        if (fs.existsSync(originalDeploymentDir)) {
-            const files = getAllFiles(originalDeploymentDir);
-            
-            for (const file of files) {
-                const destPath = path.join(newDeploymentDir, file.relativePath);
-                const destDir = path.dirname(destPath);
-                
-                if (!fs.existsSync(destDir)) {
-                    fs.mkdirSync(destDir, { recursive: true });
-                }
-                
-                fs.copyFileSync(file.path, destPath);
-            }
-        }
-        
-        // Create deployment record
-        const deploymentUrl = `${config.baseUrl}/static/${newDeploymentId}`;
-        const adminUrl = `${config.baseUrl}/deployment/${newDeploymentId}`;
-        
-        await client.query(`
-            INSERT INTO deployments (id, name, description, url, admin_url, file_count, total_size, expires_at)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-        `, [
-            newDeploymentId,
-            newDeploymentName,
-            original.description,
-            deploymentUrl,
-            adminUrl,
-            original.file_count,
-            original.total_size,
-            expiresAt
-        ]);
-        
-        // Copy file records
-        const filesResult = await client.query(
-            'SELECT * FROM deployment_files WHERE deployment_id = $1',
-            [originalDeploymentId]
-        );
-        
-        for (const file of filesResult.rows) {
-            await client.query(`
-                INSERT INTO deployment_files (deployment_id, file_path, original_name, file_size, mime_type)
-                VALUES ($1, $2, $3, $4, $5)
-            `, [
-                newDeploymentId,
-                file.file_path,
-                file.original_name,
-                file.file_size,
-                file.mime_type
-            ]);
-        }
-        
-        await client.query('COMMIT');
-        
-        // Log activity
-        await logActivity('info', `Cloned deployment ${originalDeploymentId} to ${newDeploymentId}`, null, originalDeploymentId, req);
-        
-        res.json({
-            success: true,
-            message: 'Deployment cloned successfully',
-            newId: newDeploymentId,
-            newUrl: deploymentUrl
-        });
-        
-    } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('Clone error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to clone deployment'
-        });
-    } finally {
-        client.release();
-    }
-});
-
-/**
- * Download deployment as ZIP
- */
-app.get('/api/deployments/:id/download', async (req, res) => {
-    try {
-        const deploymentId = req.params.id;
-        const deploymentDir = path.join(config.deploymentPath, deploymentId);
-        
-        if (!fs.existsSync(deploymentDir)) {
-            return res.status(404).json({
-                success: false,
-                error: 'Deployment not found'
-            });
-        }
-        
-        // Get deployment name for filename
-        const deploymentResult = await pool.query(
-            'SELECT name FROM deployments WHERE id = $1',
-            [deploymentId]
-        );
-        
-        const deploymentName = deploymentResult.rows[0]?.name || 'deployment';
-        const filename = `${deploymentName.replace(/[^a-z0-9]/gi, '-').toLowerCase()}-${deploymentId}.zip`;
-        
-        // Create ZIP archive
-        const archive = archiver('zip', {
-            zlib: { level: 9 }
-        });
-        
-        res.attachment(filename);
-        archive.pipe(res);
-        archive.directory(deploymentDir, false);
-        archive.finalize();
-        
-        // Log activity
-        await logActivity('info', `Downloaded deployment ${deploymentId}`, null, deploymentId, req);
-        
-    } catch (error) {
-        logger.error('Download error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to download deployment'
-        });
-    }
-});
-
-/**
- * Admin cleanup endpoint
- */
-app.post('/api/admin/cleanup', requireAdmin, async (req, res) => {
-    const client = await pool.connect();
-    
-    try {
-        await client.query('BEGIN');
-        
-        // Get expired deployments
-        const expiredResult = await client.query(`
-            SELECT id FROM deployments 
-            WHERE expires_at < CURRENT_TIMESTAMP 
-            AND status != 'deleted'
-        `);
-        
-        const expiredIds = expiredResult.rows.map(row => row.id);
-        
-        // Mark as deleted
-        await client.query(`
-            UPDATE deployments 
-            SET status = 'deleted', updated_at = CURRENT_TIMESTAMP 
-            WHERE id = ANY($1)
-        `, [expiredIds]);
-        
-        // Delete directories
-        for (const id of expiredIds) {
-            const deploymentDir = path.join(config.deploymentPath, id);
-            if (fs.existsSync(deploymentDir)) {
-                fs.rmSync(deploymentDir, { recursive: true, force: true });
-            }
-        }
-        
-        await client.query('COMMIT');
-        
-        // Log activity
-        await logActivity('info', `Cleaned up ${expiredIds.length} expired deployments`, null, null, req);
-        
-        res.json({
-            success: true,
-            message: `Cleaned up ${expiredIds.length} expired deployments`,
-            deleted: expiredIds.length
-        });
-        
-    } catch (error) {
-        await client.query('ROLLBACK');
-        logger.error('Cleanup error:', error);
-        res.status(500).json({
-            success: false,
-            error: error.message || 'Failed to cleanup expired deployments'
-        });
-    } finally {
-        client.release();
-    }
-});
-
-/**
- * Health check endpoint
- */
 app.get('/api/health', async (req, res) => {
     try {
-        // Check database connection
-        await pool.query('SELECT 1');
+        const { data, error } = await supabase.from('deployments').select('count').limit(1);
+        
+        if (error && !error.message.includes('does not exist')) {
+            throw error;
+        }
         
         res.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
-            database: 'connected',
+            supabase: 'connected',
             uptime: process.uptime(),
             environment: config.env,
             vercel: isVercel
         });
         
     } catch (error) {
-        logger.error('Health check failed:', error);
+        console.error('Health check failed:', error);
         res.status(500).json({
             status: 'unhealthy',
             timestamp: new Date().toISOString(),
@@ -1380,11 +701,57 @@ app.get('/api/health', async (req, res) => {
     }
 });
 
-// ============================================================================
-// Error Handling
-// ============================================================================
+app.get('/static/:deploymentId/*', async (req, res) => {
+    try {
+        const deploymentId = req.params.deploymentId;
+        const filePath = req.params[0];
+        
+        const { data: deployment, error } = await supabase
+            .from('deployments')
+            .select('*')
+            .eq('id', deploymentId)
+            .eq('status', 'active')
+            .single();
+        
+        if (error || !deployment) {
+            return res.status(404).send('Deployment not found');
+        }
+        
+        if (new Date(deployment.expires_at) < new Date()) {
+            return res.status(410).send('Deployment has expired');
+        }
+        
+        const fullPath = `${deploymentId}/${filePath}`;
+        const { data, error: storageError } = await supabase.storage
+            .from('deployments')
+            .download(fullPath);
+        
+        if (storageError) {
+            if (filePath === '' || filePath.endsWith('/')) {
+                const indexPath = `${deploymentId}/${filePath}index.html`;
+                const { data: indexData, error: indexError } = await supabase.storage
+                    .from('deployments')
+                    .download(indexPath);
+                
+                if (!indexError && indexData) {
+                    res.set('Content-Type', 'text/html');
+                    return res.send(Buffer.from(await indexData.arrayBuffer()));
+                }
+            }
+            return res.status(404).send('File not found');
+        }
+        
+        const mimeType = getMimeType(filePath);
+        res.set('Content-Type', mimeType);
+        
+        res.send(Buffer.from(await data.arrayBuffer()));
+        
+    } catch (error) {
+        console.error('Error serving static file:', error);
+        res.status(500).send('Internal server error');
+    }
+});
 
-// 404 handler
 app.use((req, res) => {
     res.status(404).render('error', {
         title: 'Page Not Found',
@@ -1393,9 +760,8 @@ app.use((req, res) => {
     });
 });
 
-// Error handler
 app.use((err, req, res, next) => {
-    logger.error('Unhandled error:', {
+    console.error('Unhandled error:', {
         error: err.message,
         stack: err.stack,
         url: req.originalUrl,
@@ -1408,103 +774,12 @@ app.use((err, req, res, next) => {
     
     res.status(statusCode).render('error', {
         title: 'Error',
-        message: message,
+        message,
         status: statusCode,
         error: config.env === 'development' ? err : {}
     });
 });
 
-// ============================================================================
-// Startup
-// ============================================================================
+testSupabaseConnection();
 
-/**
- * Clean up old uploads on startup
- */
-async function cleanupOldUploads() {
-    try {
-        // Skip cleanup on Vercel
-        if (isVercel) {
-            return;
-        }
-        
-        const uploadDir = config.uploadPath;
-        if (!fs.existsSync(uploadDir)) return;
-        
-        const dirs = fs.readdirSync(uploadDir);
-        const now = Date.now();
-        const maxAge = 24 * 60 * 60 * 1000; // 24 hours
-        
-        for (const dir of dirs) {
-            const dirPath = path.join(uploadDir, dir);
-            const stat = fs.statSync(dirPath);
-            
-            if (now - stat.ctimeMs > maxAge) {
-                fs.rmSync(dirPath, { recursive: true, force: true });
-                logger.info(`Cleaned up old upload: ${dir}`);
-            }
-        }
-    } catch (error) {
-        logger.error('Failed to cleanup old uploads:', error);
-    }
-}
-
-/**
- * Start the server
- */
-async function startServer() {
-    try {
-        // Cleanup old uploads (local only)
-        await cleanupOldUploads();
-        
-        if (!isVercel) {
-            // Start server normally for local development
-            app.listen(config.port, () => {
-                logger.info(`✅ Server running on port ${config.port}`);
-                logger.info(`📁 Upload path: ${config.uploadPath}`);
-                logger.info(`📁 Deployment path: ${config.deploymentPath}`);
-                logger.info(`🌐 Base URL: ${config.baseUrl}`);
-                logger.info(`🔧 Environment: ${config.env}`);
-                
-                console.log('\n============================================');
-                console.log('🚀 QuickDeploy is running!');
-                console.log('============================================');
-                console.log(`Local:    ${config.baseUrl}`);
-                console.log(`Upload:   ${config.baseUrl}/upload`);
-                console.log(`Admin:    ${config.baseUrl}/admin`);
-                console.log('============================================\n');
-            });
-        }
-        
-    } catch (error) {
-        logger.error('Failed to start server:', error);
-        if (!isVercel) process.exit(1);
-    }
-}
-
-// Handle graceful shutdown (local only)
-if (!isVercel) {
-    process.on('SIGTERM', () => {
-        logger.info('SIGTERM received, shutting down gracefully...');
-        pool.end(() => {
-            logger.info('Database pool closed');
-            process.exit(0);
-        });
-    });
-
-    process.on('SIGINT', () => {
-        logger.info('SIGINT received, shutting down gracefully...');
-        pool.end(() => {
-            logger.info('Database pool closed');
-            process.exit(0);
-        });
-    });
-}
-
-// Start the server (local only)
-if (require.main === module && !isVercel) {
-    startServer();
-}
-
-// Export for Vercel serverless
 module.exports = app;
