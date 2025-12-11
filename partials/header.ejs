@@ -1,0 +1,333 @@
+<!-- Additional Meta Tags -->
+<meta name="description" content="QuickDeploy - Deploy static sites instantly without login. Simple Vercel clone for rapid deployment.">
+<meta name="keywords" content="static hosting, deploy, vercel clone, cloud deployment, no login required">
+<meta name="author" content="QuickDeploy">
+
+<!-- Open Graph / Social Media Meta -->
+<meta property="og:title" content="<%= title || 'QuickDeploy' %> | Static Site Hosting">
+<meta property="og:description" content="Deploy static sites in seconds without login. Simple, fast, and free hosting.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="<%= baseUrl || 'https://quickdeploy.example.com' %>">
+<meta property="og:image" content="<%= baseUrl || '' %>/images/og-image.png">
+
+<!-- Twitter Card -->
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="<%= title || 'QuickDeploy' %>">
+<meta name="twitter:description" content="Deploy static sites in seconds without login.">
+
+<!-- Favicon -->
+<link rel="icon" type="image/x-icon" href="https://img.icons8.com/color/96/000000/cloud.png">
+<link rel="apple-touch-icon" href="https://img.icons8.com/color/96/000000/cloud.png">
+
+<!-- Additional CSS for Components -->
+<style>
+    /* Loading Spinner */
+    .loading-spinner {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.9);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+        flex-direction: column;
+    }
+    
+    .loading-spinner.active {
+        display: flex;
+    }
+    
+    .spinner {
+        width: 50px;
+        height: 50px;
+        border: 5px solid #f3f3f3;
+        border-top: 5px solid #0070f3;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin-bottom: 20px;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    /* Toast Notification Customization */
+    .toast-success {
+        background-color: #17c964 !important;
+    }
+    
+    .toast-error {
+        background-color: #f2135d !important;
+    }
+    
+    .toast-info {
+        background-color: #0070f3 !important;
+    }
+    
+    .toast-warning {
+        background-color: #f5a623 !important;
+    }
+    
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+    }
+    
+    ::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb {
+        background: #c1c1c1;
+        border-radius: 4px;
+    }
+    
+    ::-webkit-scrollbar-thumb:hover {
+        background: #a8a8a8;
+    }
+    
+    /* Tooltip */
+    [data-tooltip] {
+        position: relative;
+    }
+    
+    [data-tooltip]:before {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #333;
+        color: white;
+        padding: 6px 12px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s;
+        z-index: 1000;
+    }
+    
+    [data-tooltip]:hover:before {
+        opacity: 1;
+        visibility: visible;
+        margin-bottom: 8px;
+    }
+    
+    /* Badge */
+    .badge {
+        display: inline-block;
+        padding: 3px 8px;
+        font-size: 0.75rem;
+        font-weight: 600;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        vertical-align: baseline;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+    
+    /* Modal Base */
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+    }
+    
+    .modal.active {
+        display: flex;
+    }
+    
+    .modal-content {
+        background: white;
+        border-radius: 15px;
+        max-width: 500px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    }
+    
+    /* Animation Classes */
+    .fade-in {
+        animation: fadeIn 0.3s ease-in;
+    }
+    
+    .slide-up {
+        animation: slideUp 0.3s ease-out;
+    }
+    
+    @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+    }
+    
+    @keyframes slideUp {
+        from {
+            opacity: 0;
+            transform: translateY(20px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+    
+    /* Dark Mode Support */
+    @media (prefers-color-scheme: dark) {
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e1e1e1;
+        }
+        
+        .main-content {
+            background: #121212;
+        }
+        
+        .card, .header, .stat-card {
+            background: #1e1e1e;
+            color: #e1e1e1;
+        }
+        
+        .header h1, .stat-card h3, .card-header h2 {
+            color: #e1e1e1;
+        }
+        
+        .deployments-table th,
+        .deployments-table td,
+        .admin-table th,
+        .admin-table td {
+            border-color: #333;
+        }
+        
+        .deployments-table tr:hover,
+        .admin-table tr:hover {
+            background: rgba(255,255,255,0.05);
+        }
+    }
+    
+    /* Print Styles */
+    @media print {
+        .sidebar, .header-actions, .action-buttons, .quick-actions {
+            display: none !important;
+        }
+        
+        .main-content {
+            margin-left: 0;
+            padding: 0;
+        }
+    }
+</style>
+
+<!-- Global Scripts that need to be in head -->
+<script>
+    // Global configuration
+    window.AppConfig = {
+        baseUrl: '<%= baseUrl || window.location.origin %>',
+        apiUrl: '<%= baseUrl || window.location.origin %>/api',
+        version: '1.0.0',
+        environment: 'production'
+    };
+    
+    // Global error handler
+    window.addEventListener('error', function(e) {
+        console.error('Global error:', e.error);
+        if (window.toastr) {
+            toastr.error('An error occurred. Please try again.');
+        }
+    });
+    
+    // Page load spinner
+    document.addEventListener('DOMContentLoaded', function() {
+        // Show loading on form submissions
+        document.addEventListener('submit', function(e) {
+            if (e.target.tagName === 'FORM') {
+                showLoading();
+            }
+        });
+        
+        // Handle AJAX errors
+        document.addEventListener('ajaxError', function(e) {
+            hideLoading();
+            toastr.error(e.detail.message || 'Request failed');
+        });
+    });
+    
+    // Loading functions
+    function showLoading(message = 'Loading...') {
+        let spinner = document.getElementById('globalSpinner');
+        if (!spinner) {
+            spinner = document.createElement('div');
+            spinner.id = 'globalSpinner';
+            spinner.className = 'loading-spinner';
+            spinner.innerHTML = `
+                <div class="spinner"></div>
+                <p>${message}</p>
+            `;
+            document.body.appendChild(spinner);
+        }
+        spinner.classList.add('active');
+    }
+    
+    function hideLoading() {
+        const spinner = document.getElementById('globalSpinner');
+        if (spinner) {
+            spinner.classList.remove('active');
+        }
+    }
+    
+    // Utility function for API calls
+    window.apiCall = async function(url, options = {}) {
+        showLoading();
+        try {
+            const response = await fetch(url, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...options.headers
+                },
+                ...options
+            });
+            
+            hideLoading();
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            hideLoading();
+            toastr.error(error.message || 'API call failed');
+            throw error;
+        }
+    };
+    
+    // Debounce function
+    window.debounce = function(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    };
+</script>

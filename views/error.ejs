@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'Error' %> | QuickDeploy</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0070f3;
+            --primary-dark: #0051cc;
+            --danger: #f2135d;
+            --warning: #f5a623;
+            --dark: #111;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --border: #e1e4e8;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #333;
+            padding: 20px;
+        }
+        
+        .error-container {
+            width: 100%;
+            max-width: 600px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .error-header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .error-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: rgba(255,255,255,0.1);
+            transform: rotate(45deg);
+            animation: shine 3s infinite linear;
+        }
+        
+        @keyframes shine {
+            0% {
+                transform: translateX(-100%) translateY(-100%) rotate(45deg);
+            }
+            100% {
+                transform: translateX(100%) translateY(100%) rotate(45deg);
+            }
+        }
+        
+        .error-icon {
+            font-size: 5rem;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+            animation: bounce 2s infinite;
+        }
+        
+        @keyframes bounce {
+            0%, 100% {
+                transform: translateY(0);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+        
+        .error-header h1 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .error-header p {
+            font-size: 1.1rem;
+            opacity: 0.9;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .error-content {
+            padding: 40px 30px;
+        }
+        
+        .error-message {
+            font-size: 1.2rem;
+            line-height: 1.6;
+            color: var(--dark);
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .error-details {
+            background: var(--light);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+            border-left: 4px solid var(--danger);
+        }
+        
+        .error-details summary {
+            font-weight: 600;
+            color: var(--dark);
+            cursor: pointer;
+            padding: 10px;
+            user-select: none;
+        }
+        
+        .error-details pre {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 5px;
+            overflow-x: auto;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 0.9rem;
+            color: var(--dark);
+            border: 1px solid var(--border);
+        }
+        
+        .error-actions {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-family: 'Inter', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,112,243,0.3);
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        .btn-outline:hover {
+            background: var(--primary);
+            color: white;
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            opacity: 0.9;
+            transform: translateY(-2px);
+        }
+        
+        .error-footer {
+            padding: 20px 30px;
+            background: var(--light);
+            text-align: center;
+            border-top: 1px solid var(--border);
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+        
+        .error-code {
+            display: inline-block;
+            padding: 4px 12px;
+            background: rgba(242,19,93,0.1);
+            color: var(--danger);
+            border-radius: 20px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+        
+        .suggestions {
+            background: rgba(0,112,243,0.05);
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .suggestions h3 {
+            color: var(--primary);
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+        
+        .suggestions ul {
+            list-style: none;
+            padding-left: 20px;
+        }
+        
+        .suggestions li {
+            margin-bottom: 10px;
+            padding-left: 25px;
+            position: relative;
+        }
+        
+        .suggestions li::before {
+            content: '✓';
+            position: absolute;
+            left: 0;
+            color: var(--primary);
+            font-weight: bold;
+        }
+        
+        .timer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: var(--gray);
+        }
+        
+        .timer span {
+            font-weight: 600;
+            color: var(--primary);
+        }
+        
+        .contact-support {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px dashed var(--border);
+        }
+        
+        .contact-support a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+        
+        .contact-support a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Status code specific styles */
+        .status-404 .error-icon { color: #ff6b6b; }
+        .status-500 .error-icon { color: #ff9f43; }
+        .status-403 .error-icon { color: #ee5a24; }
+        .status-400 .error-icon { color: #ff9ff3; }
+        
+        /* Dark mode support */
+        @media (prefers-color-scheme: dark) {
+            .error-container {
+                background: #1e1e1e;
+                color: #e1e1e1;
+            }
+            
+            .error-content {
+                color: #e1e1e1;
+            }
+            
+            .error-message {
+                color: #e1e1e1;
+            }
+            
+            .error-details {
+                background: #2d2d2d;
+            }
+            
+            .error-details pre {
+                background: #252525;
+                color: #e1e1e1;
+                border-color: #444;
+            }
+            
+            .error-footer {
+                background: #252525;
+                border-color: #444;
+                color: #aaa;
+            }
+            
+            .suggestions {
+                background: rgba(0,112,243,0.1);
+            }
+        }
+        
+        /* Responsive design */
+        @media (max-width: 768px) {
+            .error-container {
+                margin: 20px;
+            }
+            
+            .error-header {
+                padding: 30px 20px;
+            }
+            
+            .error-icon {
+                font-size: 4rem;
+            }
+            
+            .error-header h1 {
+                font-size: 2rem;
+            }
+            
+            .error-content {
+                padding: 30px 20px;
+            }
+            
+            .error-actions {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+            }
+        }
+        
+        @media (max-width: 480px) {
+            body {
+                padding: 10px;
+            }
+            
+            .error-header {
+                padding: 25px 15px;
+            }
+            
+            .error-header h1 {
+                font-size: 1.8rem;
+            }
+            
+            .error-content {
+                padding: 25px 15px;
+            }
+            
+            .error-icon {
+                font-size: 3.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="error-container status-<%= status || 500 %>">
+        <!-- Error Header -->
+        <div class="error-header">
+            <% 
+                let errorIcon = 'fas fa-exclamation-triangle';
+                let errorTitle = 'Error';
+                let errorSubtitle = 'Something went wrong';
+                
+                if (status === 404) {
+                    errorIcon = 'fas fa-map-marker-alt';
+                    errorTitle = '404';
+                    errorSubtitle = 'Page not found';
+                } else if (status === 500) {
+                    errorIcon = 'fas fa-server';
+                    errorTitle = '500';
+                    errorSubtitle = 'Internal server error';
+                } else if (status === 403) {
+                    errorIcon = 'fas fa-ban';
+                    errorTitle = '403';
+                    errorSubtitle = 'Access denied';
+                } else if (status === 400) {
+                    errorIcon = 'fas fa-exclamation-circle';
+                    errorTitle = '400';
+                    errorSubtitle = 'Bad request';
+                } else if (status === 401) {
+                    errorIcon = 'fas fa-user-lock';
+                    errorTitle = '401';
+                    errorSubtitle = 'Unauthorized';
+                } else if (status === 429) {
+                    errorIcon = 'fas fa-tachometer-alt';
+                    errorTitle = '429';
+                    errorSubtitle = 'Too many requests';
+                }
+            %>
+            
+            <div class="error-icon">
+                <i class="<%= errorIcon %>"></i>
+            </div>
+            <h1><%= errorTitle %></h1>
+            <p><%= errorSubtitle %></p>
+            
+            <% if (status) { %>
+            <div class="error-code">HTTP <%= status %></div>
+            <% } %>
+        </div>
+        
+        <!-- Error Content -->
+        <div class="error-content">
+            <!-- Main Error Message -->
+            <div class="error-message">
+                <%= message || 'An unexpected error has occurred. Please try again later.' %>
+            </div>
+            
+            <!-- Suggestions based on error type -->
+            <div class="suggestions">
+                <h3><i class="fas fa-lightbulb"></i> Try these steps:</h3>
+                <% if (status === 404) { %>
+                <ul>
+                    <li>Check the URL for any typos</li>
+                    <li>Navigate back to the homepage</li>
+                    <li>Use the search function to find what you're looking for</li>
+                    <li>Contact support if you believe this is an error</li>
+                </ul>
+                <% } else if (status === 500) { %>
+                <ul>
+                    <li>Refresh the page and try again</li>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Try again in a few minutes</li>
+                    <li>Contact our support team if the issue persists</li>
+                </ul>
+                <% } else if (status === 403) { %>
+                <ul>
+                    <li>Make sure you're logged in (if required)</li>
+                    <li>Check your permissions for this resource</li>
+                    <li>Contact the administrator for access</li>
+                </ul>
+                <% } else if (status === 429) { %>
+                <ul>
+                    <li>Wait a few minutes before trying again</li>
+                    <li>Check if you have multiple tabs/windows open</li>
+                    <li>Try using the application at a later time</li>
+                </ul>
+                <% } else { %>
+                <ul>
+                    <li>Refresh the page and try your action again</li>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Try using a different browser</li>
+                    <li>Contact support if the problem continues</li>
+                </ul>
+                <% } %>
+            </div>
+            
+            <!-- Error Details (Development only) -->
+            <% if (error && error.stack && process.env.NODE_ENV === 'development') { %>
+            <details class="error-details">
+                <summary>
+                    <i class="fas fa-code"></i> Technical Details (Development Only)
+                </summary>
+                <pre><%= error.stack %></pre>
+            </details>
+            <% } %>
+            
+            <!-- Action Buttons -->
+            <div class="error-actions">
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home"></i> Go to Homepage
+                </a>
+                
+                <a href="javascript:history.back()" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Go Back
+                </a>
+                
+                <button onclick="location.reload()" class="btn btn-outline">
+                    <i class="fas fa-redo"></i> Refresh Page
+                </button>
+                
+                <% if (status === 429) { %>
+                <div class="timer">
+                    You can try again in <span id="countdown">60</span> seconds
+                </div>
+                <% } %>
+            </div>
+            
+            <!-- Contact Support -->
+            <div class="contact-support">
+                <p>
+                    <i class="fas fa-life-ring"></i> Need help? 
+                    <a href="mailto:support@quickdeploy.com">Contact our support team</a>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Error Footer -->
+        <div class="error-footer">
+            <p>
+                <i class="fas fa-info-circle"></i> 
+                QuickDeploy • Error <%= status || 'Unknown' %> • 
+                <%= new Date().toLocaleString() %>
+            </p>
+            <p style="font-size: 0.8rem; margin-top: 5px;">
+                Request ID: <span id="request-id"><%= Math.random().toString(36).substring(2, 15) %></span>
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        // Auto refresh countdown for rate limiting errors
+        if (document.querySelector('.timer')) {
+            let seconds = 60;
+            const countdownElement = document.getElementById('countdown');
+            
+            const countdown = setInterval(() => {
+                seconds--;
+                countdownElement.textContent = seconds;
+                
+                if (seconds <= 0) {
+                    clearInterval(countdown);
+                    countdownElement.textContent = '0';
+                    // Enable refresh button
+                    document.querySelector('button[onclick="location.reload()"]').disabled = false;
+                }
+            }, 1000);
+        }
+        
+        // Add click animation to buttons
+        document.querySelectorAll('.btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                // Create ripple effect
+                const ripple = document.createElement('span');
+                const rect = this.getBoundingClientRect();
+                const size = Math.max(rect.width, rect.height);
+                const x = e.clientX - rect.left - size / 2;
+                const y = e.clientY - rect.top - size / 2;
+                
+                ripple.style.cssText = `
+                    position: absolute;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.7);
+                    transform: scale(0);
+                    animation: ripple-animation 0.6s linear;
+                    width: ${size}px;
+                    height: ${size}px;
+                    top: ${y}px;
+                    left: ${x}px;
+                `;
+                
+                this.appendChild(ripple);
+                
+                setTimeout(() => {
+                    ripple.remove();
+                }, 600);
+            });
+        });
+        
+        // Add CSS for ripple animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple-animation {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+            .btn {
+                position: relative;
+                overflow: hidden;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Log error to console for debugging
+        console.error('Error <%= status || 500 %>: <%= message || "Unknown error" %>');
+        <% if (error && error.message) { %>
+        console.error('Error details:', <%= JSON.stringify(error.message) %>);
+        <% } %>
+        
+        // Report error to analytics (if available)
+        if (typeof gtag !== 'undefined') {
+            gtag('event', 'exception', {
+                'description': 'Error <%= status || 500 %>: <%= message || "Unknown error" %>',
+                'fatal': <%= [500, 502, 503, 504].includes(status) ? 'true' : 'false' %>
+            });
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // F5 to refresh
+            if (e.key === 'F5') {
+                location.reload();
+            }
+            // Escape to go back
+            if (e.key === 'Escape') {
+                history.back();
+            }
+            // H to go home
+            if (e.key === 'h' || e.key === 'H') {
+                window.location.href = '/';
+            }
+        });
+        
+        // Auto-redirect after 30 seconds for certain errors
+        if (<%= [404, 500, 503].includes(status) %>) {
+            setTimeout(() => {
+                if (confirm('You will be redirected to the homepage. Click OK to continue or Cancel to stay.')) {
+                    window.location.href = '/';
+                }
+            }, 30000);
+        }
+    </script>
+</body>
+</html>

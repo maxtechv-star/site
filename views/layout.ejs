@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title || 'QuickDeploy' %> | Static Site Hosting</title>
+    <link rel="stylesheet" href="/css/styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.css">
+    <style>
+        :root {
+            --primary: #0070f3;
+            --primary-dark: #0051cc;
+            --secondary: #7928ca;
+            --success: #17c964;
+            --danger: #f2135d;
+            --warning: #f5a623;
+            --dark: #111;
+            --light: #f8f9fa;
+            --gray: #6c757d;
+            --border: #e1e4e8;
+            --card-bg: #ffffff;
+            --sidebar-bg: #1a1a2e;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+        
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* Sidebar */
+        .sidebar {
+            width: 250px;
+            background: var(--sidebar-bg);
+            color: white;
+            padding: 30px 0;
+            position: fixed;
+            height: 100vh;
+            box-shadow: 5px 0 15px rgba(0,0,0,0.1);
+        }
+        
+        .logo {
+            text-align: center;
+            margin-bottom: 40px;
+            padding: 0 20px;
+        }
+        
+        .logo h1 {
+            font-family: 'Poppins', sans-serif;
+            font-size: 1.8rem;
+            color: white;
+            margin-top: 10px;
+        }
+        
+        .logo i {
+            font-size: 2.5rem;
+            color: #667eea;
+        }
+        
+        .nav-links {
+            list-style: none;
+        }
+        
+        .nav-links li {
+            margin-bottom: 5px;
+        }
+        
+        .nav-links a {
+            display: flex;
+            align-items: center;
+            padding: 15px 30px;
+            color: #b3b3cc;
+            text-decoration: none;
+            transition: all 0.3s;
+            font-size: 0.95rem;
+            border-left: 3px solid transparent;
+        }
+        
+        .nav-links a:hover,
+        .nav-links a.active {
+            background: rgba(255,255,255,0.05);
+            color: white;
+            border-left: 3px solid #667eea;
+        }
+        
+        .nav-links i {
+            margin-right: 12px;
+            width: 20px;
+            text-align: center;
+        }
+        
+        /* Main Content */
+        .main-content {
+            flex: 1;
+            margin-left: 250px;
+            padding: 30px;
+            background: #f5f7fb;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .header h1 {
+            font-family: 'Poppins', sans-serif;
+            color: #333;
+            font-size: 1.8rem;
+        }
+        
+        .header p {
+            color: var(--gray);
+            margin-top: 5px;
+        }
+        
+        .stats-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+            transition: transform 0.3s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .stat-card i {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+        
+        .stat-card h3 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            color: #333;
+        }
+        
+        .stat-card p {
+            color: var(--gray);
+            font-size: 0.9rem;
+        }
+        
+        .card-primary { border-left: 4px solid #0070f3; }
+        .card-success { border-left: 4px solid #17c964; }
+        .card-warning { border-left: 4px solid #f5a623; }
+        .card-danger { border-left: 4px solid #f2135d; }
+        
+        /* Buttons */
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: var(--primary-dark);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,112,243,0.3);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--primary);
+            color: var(--primary);
+        }
+        
+        /* Footer */
+        .footer {
+            margin-top: 50px;
+            padding: 25px;
+            text-align: center;
+            color: var(--gray);
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border);
+        }
+        
+        /* Mobile Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                width: 70px;
+            }
+            
+            .sidebar .logo h1,
+            .sidebar .nav-links span {
+                display: none;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+            }
+            
+            .nav-links a {
+                justify-content: center;
+                padding: 15px;
+            }
+            
+            .nav-links i {
+                margin-right: 0;
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <i class="fas fa-rocket"></i>
+                <h1>QuickDeploy</h1>
+            </div>
+            <ul class="nav-links">
+                <li>
+                    <a href="/" class="<%= currentPage === 'home' ? 'active' : '' %>">
+                        <i class="fas fa-home"></i>
+                        <span>Dashboard</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/admin" class="<%= currentPage === 'admin' ? 'active' : '' %>">
+                        <i class="fas fa-cog"></i>
+                        <span>Admin Panel</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/deployments" class="<%= currentPage === 'deployments' ? 'active' : '' %>">
+                        <i class="fas fa-server"></i>
+                        <span>Deployments</span>
+                        <% if (deploymentsCount && deploymentsCount > 0) { %>
+                        <span class="badge"><%= deploymentsCount %></span>
+                        <% } %>
+                    </a>
+                </li>
+                <li>
+                    <a href="/upload">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <span>New Deployment</span>
+                    </a>
+                </li>
+                <li>
+                    <a href="/settings">
+                        <i class="fas fa-sliders-h"></i>
+                        <span>Settings</span>
+                    </a>
+                </li>
+            </ul>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <%- body %>
+        </main>
+    </div>
+
+    <!-- Scripts -->
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
+    <script src="/js/main.js"></script>
+    <script>
+        // Toastr configuration
+        toastr.options = {
+            "positionClass": "toast-top-right",
+            "progressBar": true,
+            "closeButton": true
+        };
+
+        // Display flash messages
+        <% if (messages && messages.success) { %>
+            toastr.success('<%= messages.success %>');
+        <% } %>
+        <% if (messages && messages.error) { %>
+            toastr.error('<%= messages.error %>');
+        <% } %>
+        <% if (messages && messages.info) { %>
+            toastr.info('<%= messages.info %>');
+        <% } %>
+    </script>
+</body>
+</html>

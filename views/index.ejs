@@ -1,0 +1,378 @@
+<!-- Header -->
+<header class="header">
+    <div>
+        <h1><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+        <p>Welcome to QuickDeploy - Deploy static sites instantly</p>
+    </div>
+    <div>
+        <a href="/upload" class="btn btn-primary">
+            <i class="fas fa-plus"></i> New Deployment
+        </a>
+    </div>
+</header>
+
+<!-- Stats Cards -->
+<div class="stats-cards">
+    <div class="stat-card card-primary">
+        <i class="fas fa-server text-primary"></i>
+        <h3><%= stats.activeDeployments || 0 %></h3>
+        <p>Active Deployments</p>
+    </div>
+    <div class="stat-card card-success">
+        <i class="fas fa-hdd text-success"></i>
+        <h3><%= stats.totalSize ? (stats.totalSize / 1024 / 1024).toFixed(2) : 0 %> MB</h3>
+        <p>Storage Used</p>
+    </div>
+    <div class="stat-card card-warning">
+        <i class="fas fa-file-archive text-warning"></i>
+        <h3><%= stats.totalFiles || 0 %></h3>
+        <p>Total Files</p>
+    </div>
+    <div class="stat-card card-danger">
+        <i class="fas fa-clock text-danger"></i>
+        <h3><%= stats.expiringSoon || 0 %></h3>
+        <p>Expiring Soon</p>
+    </div>
+</div>
+
+<!-- Recent Deployments -->
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-history"></i> Recent Deployments</h2>
+        <a href="/deployments" class="btn btn-outline">View All</a>
+    </div>
+    <div class="card-body">
+        <% if (recentDeployments && recentDeployments.length > 0) { %>
+            <div class="table-responsive">
+                <table class="deployments-table">
+                    <thead>
+                        <tr>
+                            <th>Name</th>
+                            <th>URL</th>
+                            <th>Files</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% recentDeployments.forEach(deploy => { %>
+                        <tr>
+                            <td>
+                                <strong><%= deploy.name || 'Untitled' %></strong>
+                                <% if (deploy.description) { %>
+                                <br><small class="text-muted"><%= deploy.description %></small>
+                                <% } %>
+                            </td>
+                            <td>
+                                <a href="<%= deploy.url %>" target="_blank" class="url-link">
+                                    <i class="fas fa-external-link-alt"></i> View Site
+                                </a>
+                                <br>
+                                <small class="text-muted copy-url" style="cursor: pointer;" 
+                                       onclick="copyToClipboard('<%= deploy.url %>')">
+                                    <%= deploy.url.replace('http://', '') %>
+                                </small>
+                            </td>
+                            <td><span class="badge"><%= deploy.file_count %></span></td>
+                            <td>
+                                <span class="status-badge status-<%= deploy.status || 'active' %>">
+                                    <%= deploy.status || 'active' %>
+                                </span>
+                            </td>
+                            <td>
+                                <%= new Date(deploy.created_at).toLocaleDateString() %>
+                                <br>
+                                <small class="text-muted">
+                                    <%= new Date(deploy.created_at).toLocaleTimeString() %>
+                                </small>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="/deployment/<%= deploy.id %>" class="btn-icon" title="View Details">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="<%= deploy.url %>" target="_blank" class="btn-icon" title="Open Site">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                    <button onclick="deleteDeployment('<%= deploy.id %>')" 
+                                            class="btn-icon btn-danger" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <i class="fas fa-cloud-upload-alt"></i>
+                <h3>No Deployments Yet</h3>
+                <p>Upload your first static site to get started!</p>
+                <a href="/upload" class="btn btn-primary">
+                    <i class="fas fa-cloud-upload-alt"></i> Deploy Now
+                </a>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h2><i class="fas fa-bolt"></i> Quick Actions</h2>
+    </div>
+    <div class="card-body">
+        <div class="quick-actions">
+            <a href="/upload?type=files" class="quick-action">
+                <div class="quick-action-icon">
+                    <i class="fas fa-folder-open"></i>
+                </div>
+                <h4>Upload Files</h4>
+                <p>Upload individual HTML, CSS, JS files</p>
+            </a>
+            <a href="/upload?type=zip" class="quick-action">
+                <div class="quick-action-icon">
+                    <i class="fas fa-file-archive"></i>
+                </div>
+                <h4>Upload ZIP</h4>
+                <p>Upload a zipped project folder</p>
+            </a>
+            <a href="/admin" class="quick-action">
+                <div class="quick-action-icon">
+                    <i class="fas fa-cog"></i>
+                </div>
+                <h4>Admin Panel</h4>
+                <p>Manage all deployments and settings</p>
+            </a>
+            <a href="/deployments" class="quick-action">
+                <div class="quick-action-icon">
+                    <i class="fas fa-list"></i>
+                </div>
+                <h4>View All</h4>
+                <p>See all your deployments</p>
+            </a>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        margin-bottom: 30px;
+    }
+    
+    .card-header {
+        padding: 25px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .card-header h2 {
+        font-family: 'Poppins', sans-serif;
+        color: #333;
+        font-size: 1.4rem;
+    }
+    
+    .card-body {
+        padding: 25px;
+    }
+    
+    .deployments-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .deployments-table th {
+        text-align: left;
+        padding: 15px;
+        border-bottom: 2px solid var(--border);
+        color: var(--gray);
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+    
+    .deployments-table td {
+        padding: 15px;
+        border-bottom: 1px solid var(--border);
+    }
+    
+    .deployments-table tr:hover {
+        background: rgba(0,112,243,0.02);
+    }
+    
+    .badge {
+        display: inline-block;
+        padding: 4px 10px;
+        background: var(--light);
+        color: var(--gray);
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .status-badge {
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    
+    .status-active {
+        background: rgba(23,201,100,0.1);
+        color: var(--success);
+    }
+    
+    .status-expired {
+        background: rgba(242,19,93,0.1);
+        color: var(--danger);
+    }
+    
+    .url-link {
+        color: var(--primary);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    
+    .url-link:hover {
+        text-decoration: underline;
+    }
+    
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+    
+    .btn-icon {
+        width: 35px;
+        height: 35px;
+        border-radius: 8px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--light);
+        color: var(--gray);
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+    
+    .btn-icon:hover {
+        background: var(--primary);
+        color: white;
+    }
+    
+    .btn-danger {
+        background: rgba(242,19,93,0.1);
+        color: var(--danger);
+    }
+    
+    .btn-danger:hover {
+        background: var(--danger);
+        color: white;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+    }
+    
+    .empty-state i {
+        font-size: 4rem;
+        color: #ddd;
+        margin-bottom: 20px;
+    }
+    
+    .empty-state h3 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    
+    .empty-state p {
+        color: var(--gray);
+        margin-bottom: 30px;
+    }
+    
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 25px;
+    }
+    
+    .quick-action {
+        text-align: center;
+        padding: 30px 20px;
+        background: var(--light);
+        border-radius: 10px;
+        text-decoration: none;
+        color: inherit;
+        transition: all 0.3s;
+    }
+    
+    .quick-action:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        background: white;
+    }
+    
+    .quick-action-icon {
+        width: 70px;
+        height: 70px;
+        border-radius: 50%;
+        background: var(--primary);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px;
+        font-size: 1.8rem;
+    }
+    
+    .quick-action h4 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    
+    .quick-action p {
+        color: var(--gray);
+        font-size: 0.9rem;
+    }
+    
+    .text-muted {
+        color: var(--gray) !important;
+    }
+    
+    .copy-url:hover {
+        color: var(--primary);
+    }
+</style>
+
+<script>
+function copyToClipboard(text) {
+    navigator.clipboard.writeText(text).then(() => {
+        toastr.success('URL copied to clipboard!');
+    });
+}
+
+function deleteDeployment(id) {
+    if (confirm('Are you sure you want to delete this deployment?')) {
+        fetch(`/api/deployments/${id}`, {
+            method: 'DELETE'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                toastr.success('Deployment deleted successfully');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                toastr.error(data.error || 'Failed to delete deployment');
+            }
+        });
+    }
+}
+</script>

@@ -1,0 +1,459 @@
+<!-- Header -->
+<header class="header">
+    <div>
+        <h1><i class="fas fa-cog"></i> Admin Panel</h1>
+        <p>Manage all deployments and system settings</p>
+    </div>
+</header>
+
+<!-- Admin Stats -->
+<div class="stats-cards">
+    <div class="stat-card card-primary">
+        <i class="fas fa-chart-line"></i>
+        <h3><%= adminStats.totalDeployments || 0 %></h3>
+        <p>Total Deployments</p>
+    </div>
+    <div class="stat-card card-success">
+        <i class="fas fa-database"></i>
+        <h3><%= adminStats.totalStorage ? (adminStats.totalStorage / 1024 / 1024).toFixed(2) : 0 %> MB</h3>
+        <p>Total Storage</p>
+    </div>
+    <div class="stat-card card-warning">
+        <i class="fas fa-users"></i>
+        <h3><%= adminStats.activeUsers || 1 %></h3>
+        <p>Active Users</p>
+    </div>
+    <div class="stat-card card-danger">
+        <i class="fas fa-trash"></i>
+        <h3><%= adminStats.expiredDeployments || 0 %></h3>
+        <p>Expired Deployments</p>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-server"></i> System Status</h2>
+        <button onclick="refreshSystemStatus()" class="btn btn-outline">
+            <i class="fas fa-sync-alt"></i> Refresh
+        </button>
+    </div>
+    <div class="card-body">
+        <div class="system-status">
+            <div class="status-item">
+                <div class="status-indicator active"></div>
+                <div class="status-content">
+                    <h4>Database</h4>
+                    <p>PostgreSQL Connection</p>
+                </div>
+                <span class="status-text">Active</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator active"></div>
+                <div class="status-content">
+                    <h4>File System</h4>
+                    <p>Storage Access</p>
+                </div>
+                <span class="status-text">Active</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator active"></div>
+                <div class="status-content">
+                    <h4>Web Server</h4>
+                    <p>Express.js Server</p>
+                </div>
+                <span class="status-text">Active</span>
+            </div>
+            <div class="status-item">
+                <div class="status-indicator active"></div>
+                <div class="status-content">
+                    <h4>Upload System</h4>
+                    <p>File Upload Handler</p>
+                </div>
+                <span class="status-text">Active</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- All Deployments -->
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-list"></i> All Deployments</h2>
+        <div class="header-actions">
+            <select id="statusFilter" class="filter-select" onchange="filterDeployments()">
+                <option value="all">All Status</option>
+                <option value="active">Active</option>
+                <option value="expired">Expired</option>
+            </select>
+            <button onclick="exportDeployments()" class="btn btn-outline">
+                <i class="fas fa-download"></i> Export
+            </button>
+        </div>
+    </div>
+    <div class="card-body">
+        <% if (allDeployments && allDeployments.length > 0) { %>
+            <div class="table-responsive">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>URL</th>
+                            <th>Files</th>
+                            <th>Size</th>
+                            <th>Status</th>
+                            <th>Created</th>
+                            <th>Expires</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% allDeployments.forEach(deploy => { 
+                            const isExpired = new Date(deploy.expires_at) < new Date();
+                        %>
+                        <tr class="<%= isExpired ? 'expired-row' : '' %>">
+                            <td><code><%= deploy.id.substring(0, 8) %></code></td>
+                            <td>
+                                <strong><%= deploy.name || 'Untitled' %></strong>
+                                <% if (deploy.description) { %>
+                                <br><small><%= deploy.description.substring(0, 50) %><%= deploy.description.length > 50 ? '...' : '' %></small>
+                                <% } %>
+                            </td>
+                            <td>
+                                <a href="<%= deploy.url %>" target="_blank" class="url-link">
+                                    <i class="fas fa-external-link-alt"></i>
+                                </a>
+                                <small class="text-muted"><%= new URL(deploy.url).hostname %></small>
+                            </td>
+                            <td><span class="badge"><%= deploy.file_count %></span></td>
+                            <td><%= (deploy.total_size / 1024).toFixed(1) %> KB</td>
+                            <td>
+                                <span class="status-badge status-<%= deploy.status || 'active' %>">
+                                    <%= isExpired ? 'expired' : (deploy.status || 'active') %>
+                                </span>
+                            </td>
+                            <td>
+                                <%= new Date(deploy.created_at).toLocaleDateString() %>
+                                <br>
+                                <small><%= new Date(deploy.created_at).toLocaleTimeString() %></small>
+                            </td>
+                            <td>
+                                <%= new Date(deploy.expires_at).toLocaleDateString() %>
+                                <br>
+                                <small class="<%= isExpired ? 'text-danger' : 'text-muted' %>">
+                                    <%= isExpired ? 'Expired' : getTimeRemaining(deploy.expires_at) %>
+                                </small>
+                            </td>
+                            <td>
+                                <div class="action-buttons">
+                                    <a href="/deployment/<%= deploy.id %>" class="btn-icon" title="View">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                    <a href="<%= deploy.url %>" target="_blank" class="btn-icon" title="Open">
+                                        <i class="fas fa-external-link-alt"></i>
+                                    </a>
+                                    <button onclick="deleteDeployment('<%= deploy.id %>')" class="btn-icon btn-danger" title="Delete">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                    <button onclick="renewDeployment('<%= deploy.id %>')" class="btn-icon btn-success" title="Renew">
+                                        <i class="fas fa-redo"></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+        <% } else { %>
+            <div class="empty-state">
+                <i class="fas fa-inbox"></i>
+                <h3>No Deployments Found</h3>
+                <p>Start by uploading your first static site</p>
+            </div>
+        <% } %>
+    </div>
+</div>
+
+<!-- System Actions -->
+<div class="card">
+    <div class="card-header">
+        <h2><i class="fas fa-tools"></i> System Actions</h2>
+    </div>
+    <div class="card-body">
+        <div class="system-actions">
+            <button onclick="cleanupExpired()" class="system-action-btn btn-warning">
+                <i class="fas fa-broom"></i>
+                <span>Cleanup Expired</span>
+                <small>Remove all expired deployments</small>
+            </button>
+            <button onclick="optimizeDatabase()" class="system-action-btn btn-primary">
+                <i class="fas fa-database"></i>
+                <span>Optimize DB</span>
+                <small>Optimize database tables</small>
+            </button>
+            <button onclick="clearTempFiles()" class="system-action-btn btn-danger">
+                <i class="fas fa-trash-alt"></i>
+                <span>Clear Temp Files</span>
+                <small>Remove temporary uploads</small>
+            </button>
+            <button onclick="exportAllData()" class="system-action-btn btn-success">
+                <i class="fas fa-file-export"></i>
+                <span>Export All Data</span>
+                <small>Backup all deployments</small>
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+    .header-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+    }
+    
+    .filter-select {
+        padding: 10px 15px;
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        background: white;
+        color: #333;
+        font-size: 0.9rem;
+    }
+    
+    .system-status {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    
+    .status-item {
+        display: flex;
+        align-items: center;
+        padding: 20px;
+        background: var(--light);
+        border-radius: 10px;
+        gap: 15px;
+    }
+    
+    .status-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--success);
+    }
+    
+    .status-indicator.inactive {
+        background: var(--danger);
+    }
+    
+    .status-content h4 {
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .status-content p {
+        color: var(--gray);
+        font-size: 0.9rem;
+    }
+    
+    .status-text {
+        margin-left: auto;
+        color: var(--success);
+        font-weight: 600;
+    }
+    
+    .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .admin-table th {
+        text-align: left;
+        padding: 15px;
+        background: var(--light);
+        color: var(--gray);
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    .admin-table td {
+        padding: 15px;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.9rem;
+    }
+    
+    .expired-row {
+        background: rgba(242,19,93,0.02);
+    }
+    
+    .expired-row:hover {
+        background: rgba(242,19,93,0.05);
+    }
+    
+    .system-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+    
+    .system-action-btn {
+        padding: 25px 20px;
+        background: var(--light);
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-align: left;
+    }
+    
+    .system-action-btn:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+    }
+    
+    .system-action-btn i {
+        font-size: 1.8rem;
+        margin-bottom: 15px;
+        display: block;
+    }
+    
+    .system-action-btn span {
+        display: block;
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #333;
+    }
+    
+    .system-action-btn small {
+        color: var(--gray);
+        font-size: 0.85rem;
+    }
+    
+    .btn-warning { background: rgba(245,166,35,0.1); color: var(--warning); }
+    .btn-warning:hover { background: var(--warning); color: white; }
+    
+    .btn-primary { background: rgba(0,112,243,0.1); color: var(--primary); }
+    .btn-primary:hover { background: var(--primary); color: white; }
+    
+    .btn-danger { background: rgba(242,19,93,0.1); color: var(--danger); }
+    .btn-danger:hover { background: var(--danger); color: white; }
+    
+    .btn-success { background: rgba(23,201,100,0.1); color: var(--success); }
+    .btn-success:hover { background: var(--success); color: white; }
+    
+    code {
+        background: var(--light);
+        padding: 3px 8px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 0.85rem;
+    }
+</style>
+
+<script>
+function getTimeRemaining(expiryDate) {
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const diffMs = expiry - now;
+    
+    if (diffMs < 0) return 'Expired';
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (diffDays > 0) return `${diffDays}d ${diffHours}h`;
+    return `${diffHours}h`;
+}
+
+function filterDeployments() {
+    const status = document.getElementById('statusFilter').value;
+    const rows = document.querySelectorAll('.admin-table tbody tr');
+    
+    rows.forEach(row => {
+        if (status === 'all') {
+            row.style.display = '';
+        } else {
+            const statusCell = row.querySelector('.status-badge').textContent.toLowerCase();
+            row.style.display = statusCell.includes(status) ? '' : 'none';
+        }
+    });
+}
+
+function cleanupExpired() {
+    if (confirm('This will permanently delete all expired deployments. Continue?')) {
+        fetch('/api/admin/cleanup', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                toastr.success(`Cleaned up ${data.deleted} expired deployments`);
+                setTimeout(() => location.reload(), 1500);
+            }
+        });
+    }
+}
+
+function optimizeDatabase() {
+    fetch('/api/admin/optimize', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            toastr.success('Database optimized successfully');
+        }
+    });
+}
+
+function clearTempFiles() {
+    fetch('/api/admin/clear-temp', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            toastr.success('Temporary files cleared');
+        }
+    });
+}
+
+function exportDeployments() {
+    fetch('/api/admin/export')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `deployments-${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            toastr.success('Export completed');
+        }
+    });
+}
+
+function renewDeployment(id) {
+    fetch(`/api/admin/renew/${id}`, { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            toastr.success('Deployment renewed for 7 days');
+            setTimeout(() => location.reload(), 1000);
+        }
+    });
+}
+
+function exportAllData() {
+    toastr.info('Exporting all deployment data...');
+    // Implementation for full data export
+}
+
+function refreshSystemStatus() {
+    toastr.info('Refreshing system status...');
+    location.reload();
+}
+</script>
