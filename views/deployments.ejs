@@ -24,19 +24,22 @@
             <div class="deployment-meta">
                 <span class="meta-item">
                     <i class="fas fa-calendar"></i>
-                    Created: <%= new Date(deployment.created_at).toLocaleString() %>
+                    Created: <%= new Date(deployment.created_at).toLocaleDateString() %>
                 </span>
                 <span class="meta-item">
                     <i class="fas fa-clock"></i>
-                    Expires: <%= new Date(deployment.expires_at).toLocaleString() %>
+                    Expires: <%= new Date(deployment.expires_at).toLocaleDateString() %>
+                    <span class="expiry-status <%= isExpired ? 'text-danger' : 'text-warning' %>">
+                        (<%= getTimeRemaining(deployment.expires_at) %>)
+                    </span>
                 </span>
                 <span class="meta-item">
                     <i class="fas fa-folder"></i>
-                    Files: <%= deployment.file_count %>
+                    Files: <%= deployment.file_count || 0 %>
                 </span>
                 <span class="meta-item">
                     <i class="fas fa-hdd"></i>
-                    Size: <%= (deployment.total_size / 1024).toFixed(2) %> KB
+                    Size: <%= formatBytes(deployment.total_size || 0) %>
                 </span>
             </div>
         </div>
@@ -69,35 +72,41 @@
 <div class="card">
     <div class="card-header">
         <h2><i class="fas fa-folder-open"></i> Files (<%= files.length %>)</h2>
-        <button onclick="downloadAllFiles()" class="btn btn-outline">
-            <i class="fas fa-download"></i> Download All
-        </button>
+        <div class="header-actions">
+            <button onclick="downloadAllFiles()" class="btn btn-outline">
+                <i class="fas fa-download"></i> Download All
+            </button>
+        </div>
     </div>
     <div class="card-body">
         <div class="file-browser">
             <% if (files && files.length > 0) { %>
                 <div class="file-list">
                     <% files.forEach(file => { 
-                        const icon = getFileIcon(file.file_path);
-                        const isImage = /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(file.file_path);
-                        const fileUrl = `${deployment.url}/${file.file_path.replace(deploymentPath + '/', '')}`;
+                        const icon = getFileIcon(file.file_path || file.original_name);
+                        const isImage = /\.(jpg|jpeg|png|gif|svg|webp)$/i.test(file.file_path || file.original_name);
+                        const fileName = file.file_path || file.original_name;
+                        const fileUrl = `${deployment.url}/${fileName}`;
                     %>
                     <div class="file-item" onclick="toggleFilePreview('<%= file.id %>', '<%= fileUrl %>', <%= isImage %>)">
                         <div class="file-icon">
                             <i class="<%= icon %>"></i>
                         </div>
                         <div class="file-details">
-                            <div class="file-name"><%= file.file_path.split('/').pop() %></div>
+                            <div class="file-name"><%= fileName %></div>
                             <div class="file-meta">
-                                <span><%= (file.file_size / 1024).toFixed(2) %> KB</span>
+                                <span><%= formatBytes(file.file_size || 0) %></span>
+                                <span><%= file.mime_type || 'Unknown type' %></span>
+                                <% if (file.created_at) { %>
                                 <span><%= new Date(file.created_at).toLocaleDateString() %></span>
+                                <% } %>
                             </div>
                         </div>
                         <div class="file-actions">
                             <a href="<%= fileUrl %>" target="_blank" class="file-action" title="Open">
                                 <i class="fas fa-external-link-alt"></i>
                             </a>
-                            <button onclick="downloadFile('<%= fileUrl %>', '<%= file.file_path.split('/').pop() %>')" 
+                            <button onclick="downloadFile('<%= fileUrl %>', '<%= fileName %>')" 
                                     class="file-action" title="Download">
                                 <i class="fas fa-download"></i>
                             </button>
@@ -108,12 +117,18 @@
                 
                 <!-- File Preview Modal -->
                 <div id="filePreview" class="file-preview-modal">
-                    <div class="preview-header">
-                        <h3 id="previewFileName"></h3>
-                        <button onclick="closePreview()" class="close-btn">&times;</button>
-                    </div>
-                    <div class="preview-content" id="previewContent">
-                        <!-- Preview content will be loaded here -->
+                    <div class="preview-overlay" onclick="closePreview()"></div>
+                    <div class="preview-container">
+                        <div class="preview-header">
+                            <h3 id="previewFileName"></h3>
+                            <button onclick="closePreview()" class="close-btn">&times;</button>
+                        </div>
+                        <div class="preview-content" id="previewContent">
+                            <div class="text-center" style="padding: 50px;">
+                                <i class="fas fa-spinner fa-spin fa-2x"></i>
+                                <p class="mt-3">Loading preview...</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             <% } else { %>
@@ -179,12 +194,12 @@
                 <span>Clone Deployment</span>
                 <small>Create a copy</small>
             </button>
-            <button onclick="downloadZip('<%= deployment.id %>')" class="quick-action-btn btn-warning">
+            <button onclick="downloadZip()" class="quick-action-btn btn-warning">
                 <i class="fas fa-file-archive"></i>
                 <span>Download as ZIP</span>
                 <small>Export all files</small>
             </button>
-            <button onclick="shareDeployment('<%= deployment.id %>')" class="quick-action-btn btn-info">
+            <button onclick="shareDeployment()" class="quick-action-btn btn-info">
                 <i class="fas fa-share-alt"></i>
                 <span>Share</span>
                 <small>Share deployment link</small>
@@ -241,6 +256,7 @@
         color: var(--primary);
         text-decoration: none;
         font-size: 1rem;
+        word-break: break-all;
     }
     
     .deployment-url a:hover {
@@ -259,6 +275,7 @@
         cursor: pointer;
         color: var(--gray);
         transition: all 0.3s;
+        flex-shrink: 0;
     }
     
     .copy-btn:hover {
@@ -289,6 +306,19 @@
         display: flex;
         gap: 10px;
         align-items: center;
+    }
+    
+    .expiry-status {
+        font-weight: 600;
+        margin-left: 5px;
+    }
+    
+    .text-danger {
+        color: var(--danger) !important;
+    }
+    
+    .text-warning {
+        color: var(--warning) !important;
     }
     
     /* File Browser */
@@ -327,16 +357,21 @@
         margin-right: 15px;
         color: var(--primary);
         font-size: 1.2rem;
+        flex-shrink: 0;
     }
     
     .file-details {
         flex: 1;
+        min-width: 0;
     }
     
     .file-name {
         font-weight: 500;
         margin-bottom: 5px;
         color: #333;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
     
     .file-meta {
@@ -351,6 +386,7 @@
         gap: 8px;
         opacity: 0;
         transition: opacity 0.3s;
+        flex-shrink: 0;
     }
     
     .file-item:hover .file-actions {
@@ -384,7 +420,6 @@
         left: 0;
         width: 100%;
         height: 100%;
-        background: rgba(0,0,0,0.8);
         z-index: 1000;
     }
     
@@ -392,40 +427,69 @@
         display: block;
     }
     
+    .preview-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+    }
+    
+    .preview-container {
+        position: relative;
+        max-width: 90%;
+        max-height: 90vh;
+        margin: 5vh auto;
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        z-index: 1001;
+    }
+    
     .preview-header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        padding: 20px;
+        padding: 15px 20px;
         background: white;
+        border-bottom: 1px solid var(--border);
     }
     
     .preview-header h3 {
         margin: 0;
         color: #333;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
     }
     
     .close-btn {
         background: none;
         border: none;
-        font-size: 2rem;
+        font-size: 1.5rem;
         cursor: pointer;
         color: var(--gray);
+        padding: 0;
+        width: 40px;
+        height: 40px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     
     .preview-content {
         padding: 20px;
-        background: white;
-        max-width: 90%;
-        max-height: 80vh;
-        margin: 20px auto;
-        border-radius: 10px;
+        max-height: calc(90vh - 70px);
         overflow: auto;
     }
     
     .preview-content img {
         max-width: 100%;
         height: auto;
+        display: block;
+        margin: 0 auto;
     }
     
     /* Timeline */
@@ -479,20 +543,31 @@
     }
     
     /* Quick Action Buttons */
+    .quick-actions {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+    }
+    
     .quick-action-btn {
-        padding: 25px 20px;
-        border: none;
+        padding: 20px;
+        border: 1px solid var(--border);
         border-radius: 10px;
         cursor: pointer;
         transition: all 0.3s;
         text-align: left;
-        display: block;
+        background: white;
         width: 100%;
     }
     
+    .quick-action-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
     .quick-action-btn i {
-        font-size: 1.8rem;
-        margin-bottom: 15px;
+        font-size: 1.5rem;
+        margin-bottom: 10px;
         display: block;
     }
     
@@ -508,68 +583,127 @@
         font-size: 0.85rem;
     }
     
-    .btn-info { background: rgba(0,112,243,0.1); color: var(--primary); }
-    .btn-info:hover { background: var(--primary); color: white; }
+    .quick-action-btn.btn-success {
+        border-color: var(--success);
+        color: var(--success);
+    }
+    
+    .quick-action-btn.btn-primary {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    
+    .quick-action-btn.btn-warning {
+        border-color: var(--warning);
+        color: var(--warning);
+    }
+    
+    .quick-action-btn.btn-info {
+        border-color: var(--primary);
+        color: var(--primary);
+    }
+    
+    .header-actions {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .empty-state {
+        text-align: center;
+        padding: 50px 20px;
+    }
+    
+    .empty-state i {
+        font-size: 3rem;
+        color: var(--gray);
+        margin-bottom: 20px;
+    }
+    
+    .empty-state h3 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    
+    .empty-state p {
+        color: var(--gray);
+    }
 </style>
 
 <script>
-function getFileIcon(filePath) {
-    const ext = filePath.split('.').pop().toLowerCase();
-    const icons = {
-        html: 'fas fa-code',
-        css: 'fab fa-css3-alt',
-        js: 'fab fa-js-square',
-        json: 'fas fa-file-code',
-        md: 'fas fa-file-alt',
-        txt: 'fas fa-file-alt',
-        pdf: 'fas fa-file-pdf',
-        zip: 'fas fa-file-archive',
-        jpg: 'fas fa-file-image',
-        jpeg: 'fas fa-file-image',
-        png: 'fas fa-file-image',
-        gif: 'fas fa-file-image',
-        svg: 'fas fa-file-image',
-        webp: 'fas fa-file-image',
-        mp4: 'fas fa-file-video',
-        mp3: 'fas fa-file-audio'
-    };
-    return icons[ext] || 'fas fa-file';
-}
+// Add this to your main.js or keep here
+<% function getTimeRemaining(expiryDate) {
+    const now = new Date();
+    const expiry = new Date(expiryDate);
+    const diffMs = expiry - now;
+    
+    if (diffMs < 0) return 'Expired';
+    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    
+    if (diffDays > 0) return `${diffDays} day${diffDays !== 1 ? 's' : ''} left`;
+    if (diffHours > 0) return `${diffHours} hour${diffHours !== 1 ? 's' : ''} left`;
+    return 'Less than an hour left';
+} %>
 
 function toggleFilePreview(fileId, fileUrl, isImage) {
     const modal = document.getElementById('filePreview');
     const fileName = document.getElementById('previewFileName');
     const content = document.getElementById('previewContent');
     
-    // Get filename from URL
     const filename = fileUrl.split('/').pop();
     fileName.textContent = filename;
     
+    // Show loading state
+    content.innerHTML = `
+        <div class="text-center" style="padding: 50px;">
+            <i class="fas fa-spinner fa-spin fa-2x"></i>
+            <p class="mt-3">Loading preview...</p>
+        </div>
+    `;
+    
+    modal.classList.add('active');
+    
     if (isImage) {
-        content.innerHTML = `<img src="${fileUrl}" alt="${filename}" />`;
+        content.innerHTML = `<img src="${fileUrl}" alt="${filename}" onload="this.style.display='block'" style="display:none" />`;
     } else {
-        // For text files, fetch and display content
-        content.innerHTML = `<div class="text-center"><i class="fas fa-spinner fa-spin"></i> Loading...</div>`;
         fetch(fileUrl)
-            .then(response => response.text())
+            .then(response => {
+                if (response.headers.get('content-type')?.includes('text/')) {
+                    return response.text();
+                }
+                throw new Error('Not a text file');
+            })
             .then(text => {
-                content.innerHTML = `<pre>${escapeHtml(text.substring(0, 5000))}</pre>`;
+                const escapedText = text
+                    .replace(/&/g, '&amp;')
+                    .replace(/</g, '&lt;')
+                    .replace(/>/g, '&gt;')
+                    .replace(/"/g, '&quot;')
+                    .replace(/'/g, '&#039;');
+                
+                content.innerHTML = `
+                    <div style="background: #f5f5f5; padding: 15px; border-radius: 5px; overflow: auto;">
+                        <pre style="margin: 0; white-space: pre-wrap; word-wrap: break-word;">${escapedText.substring(0, 5000)}</pre>
+                    </div>
+                `;
+                
                 if (text.length > 5000) {
-                    content.innerHTML += '<p class="text-muted">Preview truncated. Download to see full file.</p>';
+                    content.innerHTML += '<p class="text-muted mt-2"><small>Preview truncated. Download to see full file.</small></p>';
                 }
             })
             .catch(() => {
-                content.innerHTML = '<p>Unable to preview this file type.</p>';
+                content.innerHTML = `
+                    <div class="text-center" style="padding: 50px;">
+                        <i class="fas fa-file fa-3x text-muted"></i>
+                        <p class="mt-3">No preview available for this file type.</p>
+                        <a href="${fileUrl}" target="_blank" class="btn btn-primary mt-2">
+                            <i class="fas fa-download"></i> Download File
+                        </a>
+                    </div>
+                `;
             });
     }
-    
-    modal.classList.add('active');
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
 }
 
 function closePreview() {
@@ -585,102 +719,145 @@ function downloadFile(url, filename) {
     document.body.removeChild(a);
 }
 
-function downloadAllFiles() {
-    fetch(`/api/deployments/<%= deployment.id %>/download`)
-        .then(response => response.blob())
-        .then(blob => {
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `<%= deployment.name || 'deployment' %>-<%= deployment.id %>.zip`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-        });
+async function downloadAllFiles() {
+    try {
+        QuickDeploy.showLoading('Preparing download...');
+        const response = await fetch(`/api/deployments/<%= deployment.id %>/download`);
+        
+        if (!response.ok) {
+            throw new Error('Download failed');
+        }
+        
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `<%= deployment.name || 'deployment' %>.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        
+        QuickDeploy.showToast('Download started!', 'success');
+    } catch (error) {
+        console.error('Download error:', error);
+        QuickDeploy.showToast('Failed to download files', 'error');
+    } finally {
+        QuickDeploy.hideLoading();
+    }
 }
 
-function downloadZip(deploymentId) {
+function downloadZip() {
     downloadAllFiles();
 }
 
-function renewDeployment(deploymentId) {
-    fetch(`/api/admin/renew/${deploymentId}`, { method: 'POST' })
-    .then(response => response.json())
-    .then(data => {
+async function renewDeployment(deploymentId) {
+    try {
+        const confirmed = await QuickDeploy.showConfirm({
+            title: 'Renew Deployment',
+            message: 'Extend this deployment for 7 more days?',
+            confirmText: 'Renew',
+            cancelText: 'Cancel'
+        });
+        
+        if (!confirmed) return;
+        
+        QuickDeploy.showLoading('Renewing deployment...');
+        const data = await QuickDeploy.apiRequest(`/deployments/${deploymentId}/renew`, {
+            method: 'POST'
+        });
+        
         if (data.success) {
-            toastr.success('Deployment renewed for 7 days');
-            setTimeout(() => location.reload(), 1000);
+            QuickDeploy.showToast('Deployment renewed for 7 days!', 'success');
+            setTimeout(() => location.reload(), 1500);
         }
-    });
+    } catch (error) {
+        console.error('Renew error:', error);
+    } finally {
+        QuickDeploy.hideLoading();
+    }
 }
 
-function cloneDeployment(deploymentId) {
-    if (confirm('Create a copy of this deployment?')) {
-        fetch(`/api/deployments/${deploymentId}/clone`, { method: 'POST' })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                toastr.success('Deployment cloned successfully');
+async function cloneDeployment(deploymentId) {
+    try {
+        const confirmed = await QuickDeploy.showConfirm({
+            title: 'Clone Deployment',
+            message: 'Create a copy of this deployment?',
+            confirmText: 'Clone',
+            cancelText: 'Cancel'
+        });
+        
+        if (!confirmed) return;
+        
+        QuickDeploy.showLoading('Cloning deployment...');
+        const data = await QuickDeploy.apiRequest(`/deployments/${deploymentId}/clone`, {
+            method: 'POST'
+        });
+        
+        if (data.success) {
+            QuickDeploy.showToast('Deployment cloned successfully!', 'success');
+            if (data.newId) {
                 setTimeout(() => {
                     window.location.href = `/deployment/${data.newId}`;
                 }, 1500);
             }
-        });
+        }
+    } catch (error) {
+        console.error('Clone error:', error);
+    } finally {
+        QuickDeploy.hideLoading();
     }
 }
 
-function shareDeployment(deploymentId) {
+function shareDeployment() {
     const url = `<%= deployment.url %>`;
+    
     if (navigator.share) {
         navigator.share({
-            title: '<%= deployment.name || "Check out this site" %>',
-            text: 'Check out this deployed site',
+            title: '<%= deployment.name || "QuickDeploy Site" %>',
+            text: 'Check out this site deployed on QuickDeploy',
             url: url
-        });
+        }).catch(console.error);
     } else {
-        copyToClipboard(url);
-        toastr.success('URL copied to clipboard!');
+        QuickDeploy.copyToClipboard(url);
+        QuickDeploy.showToast('URL copied to clipboard!', 'success');
     }
 }
 
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        toastr.success('Copied to clipboard!');
-    });
-}
-
-function deleteDeployment(id) {
-    if (confirm('Are you sure you want to delete this deployment?')) {
-        fetch(`/api/deployments/${id}`, {
-            method: 'DELETE'
-        })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                toastr.success('Deployment deleted successfully');
-                setTimeout(() => {
-                    window.location.href = '/deployments';
-                }, 1000);
-            } else {
-                toastr.error(data.error || 'Failed to delete deployment');
-            }
+async function deleteDeployment(id) {
+    try {
+        const confirmed = await QuickDeploy.showConfirm({
+            title: 'Delete Deployment',
+            message: 'Are you sure you want to delete this deployment? This action cannot be undone.',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'danger'
         });
+        
+        if (!confirmed) return;
+        
+        QuickDeploy.showLoading('Deleting deployment...');
+        const data = await QuickDeploy.apiRequest(`/deployments/${id}`, {
+            method: 'DELETE'
+        });
+        
+        if (data.success) {
+            QuickDeploy.showToast('Deployment deleted successfully!', 'success');
+            setTimeout(() => {
+                window.location.href = '/deployments';
+            }, 1500);
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+    } finally {
+        QuickDeploy.hideLoading();
     }
 }
 
-function getTimeRemaining(expiryDate) {
-    const now = new Date();
-    const expiry = new Date(expiryDate);
-    const diffMs = expiry - now;
-    
-    if (diffMs < 0) return 'Expired';
-    
-    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-    const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-    
-    if (diffDays > 0) return `${diffDays} days ${diffHours} hours remaining`;
-    if (diffHours > 0) return `${diffHours} hours remaining`;
-    return 'Less than an hour remaining';
-}
+// Close preview when pressing Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closePreview();
+    }
+});
 </script>

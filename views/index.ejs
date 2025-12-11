@@ -14,23 +14,23 @@
 <!-- Stats Cards -->
 <div class="stats-cards">
     <div class="stat-card card-primary">
-        <i class="fas fa-server text-primary"></i>
-        <h3><%= stats.activeDeployments || 0 %></h3>
+        <i class="fas fa-server"></i>
+        <h3><%= stats.active_deployments || 0 %></h3>
         <p>Active Deployments</p>
     </div>
     <div class="stat-card card-success">
-        <i class="fas fa-hdd text-success"></i>
-        <h3><%= stats.totalSize ? (stats.totalSize / 1024 / 1024).toFixed(2) : 0 %> MB</h3>
+        <i class="fas fa-hdd"></i>
+        <h3><%= stats.total_size ? formatBytes(stats.total_size) : '0 Bytes' %></h3>
         <p>Storage Used</p>
     </div>
     <div class="stat-card card-warning">
-        <i class="fas fa-file-archive text-warning"></i>
-        <h3><%= stats.totalFiles || 0 %></h3>
+        <i class="fas fa-file-archive"></i>
+        <h3><%= stats.total_files || 0 %></h3>
         <p>Total Files</p>
     </div>
     <div class="stat-card card-danger">
-        <i class="fas fa-clock text-danger"></i>
-        <h3><%= stats.expiringSoon || 0 %></h3>
+        <i class="fas fa-clock"></i>
+        <h3><%= stats.expiring_soon || 0 %></h3>
         <p>Expiring Soon</p>
     </div>
 </div>
@@ -56,7 +56,9 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <% recentDeployments.forEach(deploy => { %>
+                        <% recentDeployments.forEach(deploy => { 
+                            const isExpired = new Date(deploy.expires_at) < new Date();
+                        %>
                         <tr>
                             <td>
                                 <strong><%= deploy.name || 'Untitled' %></strong>
@@ -70,21 +72,22 @@
                                 </a>
                                 <br>
                                 <small class="text-muted copy-url" style="cursor: pointer;" 
-                                       onclick="copyToClipboard('<%= deploy.url %>')">
-                                    <%= deploy.url.replace('http://', '') %>
+                                       onclick="copyToClipboard('<%= deploy.url %>')" 
+                                       title="Click to copy">
+                                    <%= deploy.url.replace('https://', '') %>
                                 </small>
                             </td>
-                            <td><span class="badge"><%= deploy.file_count %></span></td>
+                            <td><span class="badge"><%= deploy.file_count || 0 %></span></td>
                             <td>
-                                <span class="status-badge status-<%= deploy.status || 'active' %>">
-                                    <%= deploy.status || 'active' %>
+                                <span class="status-badge status-<%= isExpired ? 'expired' : (deploy.status || 'active') %>">
+                                    <%= isExpired ? 'expired' : (deploy.status || 'active') %>
                                 </span>
                             </td>
                             <td>
                                 <%= new Date(deploy.created_at).toLocaleDateString() %>
                                 <br>
                                 <small class="text-muted">
-                                    <%= new Date(deploy.created_at).toLocaleTimeString() %>
+                                    <%= new Date(deploy.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) %>
                                 </small>
                             </td>
                             <td>
@@ -127,33 +130,60 @@
     <div class="card-body">
         <div class="quick-actions">
             <a href="/upload?type=files" class="quick-action">
-                <div class="quick-action-icon">
+                <div class="quick-action-icon bg-primary">
                     <i class="fas fa-folder-open"></i>
                 </div>
                 <h4>Upload Files</h4>
                 <p>Upload individual HTML, CSS, JS files</p>
             </a>
             <a href="/upload?type=zip" class="quick-action">
-                <div class="quick-action-icon">
+                <div class="quick-action-icon bg-success">
                     <i class="fas fa-file-archive"></i>
                 </div>
                 <h4>Upload ZIP</h4>
                 <p>Upload a zipped project folder</p>
             </a>
             <a href="/admin" class="quick-action">
-                <div class="quick-action-icon">
+                <div class="quick-action-icon bg-warning">
                     <i class="fas fa-cog"></i>
                 </div>
                 <h4>Admin Panel</h4>
-                <p>Manage all deployments and settings</p>
+                <p>Manage all deployments</p>
             </a>
-            <a href="/deployments" class="quick-action">
-                <div class="quick-action-icon">
-                    <i class="fas fa-list"></i>
+            <a href="https://muigampswuqdswbulgjg.supabase.co" target="_blank" class="quick-action">
+                <div class="quick-action-icon bg-info">
+                    <i class="fas fa-database"></i>
                 </div>
-                <h4>View All</h4>
-                <p>See all your deployments</p>
+                <h4>Supabase</h4>
+                <p>View database & storage</p>
             </a>
+        </div>
+    </div>
+</div>
+
+<!-- System Status -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h2><i class="fas fa-info-circle"></i> System Info</h2>
+    </div>
+    <div class="card-body">
+        <div class="system-info">
+            <div class="info-item">
+                <span class="info-label">Platform:</span>
+                <span class="info-value">Vercel + Supabase</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Storage:</span>
+                <span class="info-value">Supabase Storage</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">Database:</span>
+                <span class="info-value">Supabase PostgreSQL</span>
+            </div>
+            <div class="info-item">
+                <span class="info-label">File Limit:</span>
+                <span class="info-value">100MB per file</span>
+            </div>
         </div>
     </div>
 </div>
@@ -164,6 +194,7 @@
         border-radius: 15px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.05);
         margin-bottom: 30px;
+        border: 1px solid var(--border);
     }
     
     .card-header {
@@ -178,6 +209,7 @@
         font-family: 'Poppins', sans-serif;
         color: #333;
         font-size: 1.4rem;
+        margin: 0;
     }
     
     .card-body {
@@ -196,11 +228,13 @@
         color: var(--gray);
         font-weight: 600;
         font-size: 0.9rem;
+        white-space: nowrap;
     }
     
     .deployments-table td {
         padding: 15px;
         border-bottom: 1px solid var(--border);
+        vertical-align: middle;
     }
     
     .deployments-table tr:hover {
@@ -209,35 +243,44 @@
     
     .badge {
         display: inline-block;
-        padding: 4px 10px;
-        background: var(--light);
-        color: var(--gray);
+        padding: 4px 12px;
+        background: var(--primary);
+        color: white;
         border-radius: 20px;
         font-size: 0.8rem;
         font-weight: 600;
+        min-width: 30px;
+        text-align: center;
     }
     
     .status-badge {
-        padding: 4px 12px;
+        padding: 5px 15px;
         border-radius: 20px;
         font-size: 0.8rem;
         font-weight: 600;
+        display: inline-block;
+        text-transform: capitalize;
     }
     
     .status-active {
         background: rgba(23,201,100,0.1);
         color: var(--success);
+        border: 1px solid rgba(23,201,100,0.2);
     }
     
     .status-expired {
         background: rgba(242,19,93,0.1);
         color: var(--danger);
+        border: 1px solid rgba(242,19,93,0.2);
     }
     
     .url-link {
         color: var(--primary);
         text-decoration: none;
         font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
     }
     
     .url-link:hover {
@@ -247,11 +290,12 @@
     .action-buttons {
         display: flex;
         gap: 8px;
+        white-space: nowrap;
     }
     
     .btn-icon {
-        width: 35px;
-        height: 35px;
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
         display: inline-flex;
         align-items: center;
@@ -260,11 +304,14 @@
         color: var(--gray);
         text-decoration: none;
         transition: all 0.3s;
+        border: none;
+        cursor: pointer;
     }
     
     .btn-icon:hover {
         background: var(--primary);
         color: white;
+        transform: translateY(-2px);
     }
     
     .btn-danger {
@@ -291,16 +338,18 @@
     .empty-state h3 {
         margin-bottom: 10px;
         color: #333;
+        font-size: 1.5rem;
     }
     
     .empty-state p {
         color: var(--gray);
         margin-bottom: 30px;
+        font-size: 1rem;
     }
     
     .quick-actions {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
         gap: 25px;
     }
     
@@ -312,19 +361,21 @@
         text-decoration: none;
         color: inherit;
         transition: all 0.3s;
+        display: block;
+        border: 1px solid transparent;
     }
     
     .quick-action:hover {
         transform: translateY(-5px);
         box-shadow: 0 10px 20px rgba(0,0,0,0.1);
         background: white;
+        border-color: var(--primary);
     }
     
     .quick-action-icon {
         width: 70px;
         height: 70px;
         border-radius: 50%;
-        background: var(--primary);
         color: white;
         display: flex;
         align-items: center;
@@ -333,46 +384,153 @@
         font-size: 1.8rem;
     }
     
+    .bg-primary { background: var(--primary); }
+    .bg-success { background: var(--success); }
+    .bg-warning { background: var(--warning); }
+    .bg-info { background: var(--primary); }
+    
     .quick-action h4 {
         margin-bottom: 10px;
         color: #333;
+        font-size: 1.1rem;
     }
     
     .quick-action p {
         color: var(--gray);
         font-size: 0.9rem;
+        line-height: 1.4;
+        margin: 0;
     }
     
     .text-muted {
         color: var(--gray) !important;
     }
     
+    .copy-url {
+        cursor: pointer;
+        transition: color 0.3s;
+        display: inline-block;
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    
     .copy-url:hover {
-        color: var(--primary);
+        color: var(--primary) !important;
+    }
+    
+    .system-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+    }
+    
+    .info-item {
+        display: flex;
+        flex-direction: column;
+        padding: 15px;
+        background: var(--light);
+        border-radius: 8px;
+    }
+    
+    .info-label {
+        font-size: 0.85rem;
+        color: var(--gray);
+        margin-bottom: 5px;
+    }
+    
+    .info-value {
+        font-weight: 600;
+        color: #333;
+    }
+    
+    .mt-4 {
+        margin-top: 30px;
+    }
+    
+    /* Responsive */
+    @media (max-width: 768px) {
+        .deployments-table {
+            display: block;
+            overflow-x: auto;
+        }
+        
+        .card-header {
+            flex-direction: column;
+            gap: 15px;
+            align-items: flex-start;
+        }
+        
+        .quick-actions {
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        }
+        
+        .quick-action {
+            padding: 20px 15px;
+        }
+        
+        .quick-action-icon {
+            width: 50px;
+            height: 50px;
+            font-size: 1.5rem;
+        }
     }
 </style>
 
 <script>
-function copyToClipboard(text) {
-    navigator.clipboard.writeText(text).then(() => {
-        toastr.success('URL copied to clipboard!');
-    });
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        QuickDeploy.showToast('URL copied to clipboard!', 'success');
+    } catch (err) {
+        console.error('Copy failed:', err);
+        QuickDeploy.showToast('Failed to copy', 'error');
+    }
 }
 
-function deleteDeployment(id) {
-    if (confirm('Are you sure you want to delete this deployment?')) {
-        fetch(`/api/deployments/${id}`, {
-            method: 'DELETE'
-        })
+async function deleteDeployment(id) {
+    try {
+        const confirmed = await QuickDeploy.showConfirm({
+            title: 'Delete Deployment',
+            message: 'Are you sure you want to delete this deployment?',
+            confirmText: 'Delete',
+            cancelText: 'Cancel',
+            type: 'danger'
+        });
+        
+        if (!confirmed) return;
+        
+        QuickDeploy.showLoading('Deleting deployment...');
+        const data = await QuickDeploy.deleteDeployment(id);
+        
+        if (data) {
+            QuickDeploy.showToast('Deployment deleted successfully!', 'success');
+            setTimeout(() => location.reload(), 1500);
+        }
+    } catch (error) {
+        console.error('Delete error:', error);
+        QuickDeploy.showToast('Failed to delete deployment', 'error');
+    } finally {
+        QuickDeploy.hideLoading();
+    }
+}
+
+// Auto-refresh dashboard every 30 seconds
+setTimeout(() => {
+    fetch('/api/stats')
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                toastr.success('Deployment deleted successfully');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                toastr.error(data.error || 'Failed to delete deployment');
+                // Update stats if needed
+                console.log('Dashboard stats updated');
             }
-        });
-    }
-}
+        })
+        .catch(console.error);
+}, 30000);
+
+// Initialize dashboard
+document.addEventListener('DOMContentLoaded', () => {
+    console.log('Dashboard loaded');
+});
 </script>
