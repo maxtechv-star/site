@@ -1,212 +1,345 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= title || 'Error' %> | QuickDeploy</title>
+    <link rel="stylesheet" href="/css/styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #0070f3;
-            --danger: #f2135d;
-            --warning: #f5a623;
-            --dark: #111;
-            --gray: #666;
-            --border: #eaeaea;
-            --light: #f5f5f5;
-        }
+        /* ... existing styles ... */
         
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-        }
-        
-        .error-container {
-            background: white;
-            border-radius: 15px;
-            padding: 40px;
-            max-width: 600px;
-            width: 100%;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-            text-align: center;
-        }
-        
-        .error-icon {
-            font-size: 4rem;
-            color: var(--danger);
-            margin-bottom: 20px;
-        }
-        
-        .error-title {
-            font-size: 2rem;
-            color: var(--dark);
-            margin-bottom: 10px;
-        }
-        
-        .error-code {
-            display: inline-block;
-            background: var(--light);
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-family: monospace;
-            margin-bottom: 20px;
-            color: var(--gray);
-        }
-        
-        .error-message {
-            color: var(--gray);
-            font-size: 1.1rem;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }
-        
-        .error-actions {
-            display: flex;
-            gap: 15px;
-            justify-content: center;
-            margin-bottom: 30px;
-        }
-        
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 12px 24px;
-            font-weight: 600;
-            border: none;
+        /* Add Supabase specific error styles */
+        .supabase-error {
+            background: rgba(65, 65, 255, 0.1);
+            border-left: 4px solid #3ecf8e;
             border-radius: 8px;
-            cursor: pointer;
-            text-decoration: none;
-            transition: 0.2s ease;
-        }
-        
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            background: #0051cc;
-            transform: translateY(-2px);
-        }
-        
-        .btn-outline {
-            background: transparent;
-            border: 2px solid var(--primary);
-            color: var(--primary);
-        }
-        
-        .btn-outline:hover {
-            background: var(--primary);
-            color: white;
-        }
-        
-        .error-details {
-            background: var(--light);
-            border-radius: 10px;
-            padding: 20px;
-            margin-top: 20px;
-            text-align: left;
-            display: none;
-        }
-        
-        .error-details summary {
-            cursor: pointer;
-            font-weight: 600;
-            color: var(--gray);
-            margin-bottom: 10px;
-        }
-        
-        .error-details pre {
-            background: white;
             padding: 15px;
-            border-radius: 8px;
-            overflow: auto;
-            font-family: monospace;
-            font-size: 0.9rem;
-            color: var(--dark);
+            margin: 20px 0;
         }
         
-        @media (max-width: 768px) {
-            .error-container {
-                padding: 30px 20px;
-            }
-            
-            .error-actions {
-                flex-direction: column;
-            }
-            
-            .btn {
-                width: 100%;
-                justify-content: center;
-            }
+        .supabase-error h4 {
+            color: #3ecf8e;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .supabase-error p {
+            color: #666;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        
+        .database-error {
+            background: rgba(242, 19, 93, 0.1);
+            border-left: 4px solid #f2135d;
+        }
+        
+        .storage-error {
+            background: rgba(245, 166, 35, 0.1);
+            border-left: 4px solid #f5a623;
+        }
+        
+        .connection-error {
+            background: rgba(0, 112, 243, 0.1);
+            border-left: 4px solid #0070f3;
         }
     </style>
 </head>
 <body>
-    <div class="error-container">
-        <div class="error-icon">
-            <% if (status === 404) { %>
-                <i class="fas fa-map-marker-alt"></i>
-            <% } else if (status === 403) { %>
-                <i class="fas fa-lock"></i>
-            <% } else if (status === 500) { %>
-                <i class="fas fa-server"></i>
-            <% } else { %>
-                <i class="fas fa-exclamation-circle"></i>
+    <div class="error-container status-<%= status || 500 %>">
+        <!-- Error Header -->
+        <div class="error-header">
+            <% 
+                let errorIcon = 'fas fa-exclamation-triangle';
+                let errorTitle = 'Error';
+                let errorSubtitle = 'Something went wrong';
+                
+                if (status === 404) {
+                    errorIcon = 'fas fa-map-marker-alt';
+                    errorTitle = '404';
+                    errorSubtitle = 'Page not found';
+                } else if (status === 500) {
+                    errorIcon = 'fas fa-server';
+                    errorTitle = '500';
+                    errorSubtitle = 'Internal server error';
+                } else if (status === 403) {
+                    errorIcon = 'fas fa-ban';
+                    errorTitle = '403';
+                    errorSubtitle = 'Access denied';
+                } else if (status === 400) {
+                    errorIcon = 'fas fa-exclamation-circle';
+                    errorTitle = '400';
+                    errorSubtitle = 'Bad request';
+                } else if (status === 401) {
+                    errorIcon = 'fas fa-user-lock';
+                    errorTitle = '401';
+                    errorSubtitle = 'Unauthorized';
+                } else if (status === 429) {
+                    errorIcon = 'fas fa-tachometer-alt';
+                    errorTitle = '429';
+                    errorSubtitle = 'Too many requests';
+                }
+            %>
+            
+            <div class="error-icon">
+                <i class="<%= errorIcon %>"></i>
+            </div>
+            <h1><%= errorTitle %></h1>
+            <p><%= errorSubtitle %></p>
+            
+            <% if (status) { %>
+            <div class="error-code">HTTP <%= status %></div>
             <% } %>
         </div>
         
-        <h1 class="error-title">
-            <% if (status === 404) { %>
-                Page Not Found
-            <% } else if (status === 403) { %>
-                Access Denied
-            <% } else if (status === 500) { %>
-                Server Error
-            <% } else { %>
-                Oops! Something went wrong
+        <!-- Error Content -->
+        <div class="error-content">
+            <!-- Main Error Message -->
+            <div class="error-message">
+                <%= message || 'An unexpected error has occurred. Please try again later.' %>
+            </div>
+            
+            <!-- Supabase specific error messages -->
+            <% if (message && message.includes('Supabase') || message && message.includes('database')) { %>
+            <div class="supabase-error <%= message.includes('connection') ? 'connection-error' : message.includes('storage') ? 'storage-error' : 'database-error' %>">
+                <h4><i class="fas fa-database"></i> Supabase Connection Issue</h4>
+                <p>
+                    There seems to be an issue with our database connection. 
+                    This is usually temporary. Try refreshing the page in a few moments.
+                </p>
+            </div>
             <% } %>
-        </h1>
-        
-        <% if (status) { %>
-            <div class="error-code">Error <%= status %></div>
-        <% } %>
-        
-        <p class="error-message">
-            <%= message || 'An unexpected error occurred' %>
-        </p>
-        
-        <div class="error-actions">
-            <a href="/" class="btn btn-primary">
-                <i class="fas fa-home"></i> Go Home
-            </a>
-            <a href="javascript:history.back()" class="btn btn-outline">
-                <i class="fas fa-arrow-left"></i> Go Back
-            </a>
-        </div>
-        
-        <!-- Error Details (Development only) -->
-        <% if (locals.error && locals.error.stack && process.env.NODE_ENV === 'development') { %>
+            
+            <!-- Suggestions based on error type -->
+            <div class="suggestions">
+                <h3><i class="fas fa-lightbulb"></i> Try these steps:</h3>
+                <% if (status === 404) { %>
+                <ul>
+                    <li>Check the URL for any typos</li>
+                    <li>Navigate back to the homepage</li>
+                    <li>Use the search function to find what you're looking for</li>
+                    <li>Contact support if you believe this is an error</li>
+                </ul>
+                <% } else if (status === 500) { %>
+                <ul>
+                    <li>Refresh the page and try again</li>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Try again in a few minutes</li>
+                    <li>Contact our support team if the issue persists</li>
+                </ul>
+                <% } else if (status === 403) { %>
+                <ul>
+                    <li>Make sure you're logged in (if required)</li>
+                    <li>Check your permissions for this resource</li>
+                    <li>Contact the administrator for access</li>
+                </ul>
+                <% } else if (status === 429) { %>
+                <ul>
+                    <li>Wait a few minutes before trying again</li>
+                    <li>Check if you have multiple tabs/windows open</li>
+                    <li>Try using the application at a later time</li>
+                </ul>
+                <% } else { %>
+                <ul>
+                    <li>Refresh the page and try your action again</li>
+                    <li>Clear your browser cache and cookies</li>
+                    <li>Try using a different browser</li>
+                    <li>Contact support if the problem continues</li>
+                </ul>
+                <% } %>
+            </div>
+            
+            <!-- Supabase Status Check -->
+            <% if (status === 500 || status === 503) { %>
+            <div class="supabase-error connection-error">
+                <h4><i class="fas fa-wifi"></i> Service Status</h4>
+                <p>
+                    QuickDeploy uses Supabase for database and storage. 
+                    Check <a href="https://status.supabase.com/" target="_blank" style="color: #0070f3;">Supabase Status</a> 
+                    for any ongoing incidents.
+                </p>
+            </div>
+            <% } %>
+            
+            <!-- Error Details (Development only) -->
+            <% if (typeof error !== 'undefined' && error && error.stack && process.env.NODE_ENV === 'development') { %>
             <details class="error-details">
                 <summary>
                     <i class="fas fa-code"></i> Technical Details (Development Only)
                 </summary>
-                <pre><%= locals.error.stack %></pre>
+                <pre><%= error.stack %></pre>
             </details>
-        <% } %>
+            <% } %>
+            
+            <!-- Action Buttons -->
+            <div class="error-actions">
+                <a href="/" class="btn btn-primary">
+                    <i class="fas fa-home"></i> Go to Homepage
+                </a>
+                
+                <a href="javascript:history.back()" class="btn btn-outline">
+                    <i class="fas fa-arrow-left"></i> Go Back
+                </a>
+                
+                <button onclick="location.reload()" class="btn btn-outline">
+                    <i class="fas fa-redo"></i> Refresh Page
+                </button>
+                
+                <% if (status === 429) { %>
+                <div class="timer">
+                    You can try again in <span id="countdown">60</span> seconds
+                </div>
+                <% } %>
+            </div>
+            
+            <!-- Contact Support -->
+            <div class="contact-support">
+                <p>
+                    <i class="fas fa-life-ring"></i> Need help? 
+                    <a href="mailto:support@quickdeploy.com">Contact our support team</a>
+                </p>
+                <p style="margin-top: 10px; font-size: 0.9rem;">
+                    <i class="fas fa-database"></i> Powered by 
+                    <a href="https://supabase.com" target="_blank" style="color: #3ecf8e;">Supabase</a>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Error Footer -->
+        <div class="error-footer">
+            <p>
+                <i class="fas fa-info-circle"></i> 
+                QuickDeploy • Error <%= status || 'Unknown' %> • 
+                <%= new Date().toLocaleString() %>
+            </p>
+            <p style="font-size: 0.8rem; margin-top: 5px;">
+                Request ID: <span id="request-id"><%= Math.random().toString(36).substring(2, 15) %></span>
+                <% if (process.env.NODE_ENV === 'production') { %>
+                • <a href="https://muigampswuqdswbulgjg.supabase.co" target="_blank" style="color: #3ecf8e; text-decoration: none;">Supabase Dashboard</a>
+                <% } %>
+            </p>
+        </div>
     </div>
+    
+    <script>
+        // Auto refresh countdown for rate limiting errors
+        if (document.querySelector('.timer')) {
+            let seconds = 60;
+            const countdownElement = document.getElementById('countdown');
+            
+            const countdown = setInterval(() => {
+                seconds--;
+                countdownElement.textContent = seconds;
+                
+                if (seconds <= 0) {
+                    clearInterval(countdown);
+                    countdownElement.textContent = '0';
+                    document.querySelector('button[onclick="location.reload()"]').disabled = false;
+                }
+            }, 1000);
+        }
+        
+        // Add click animation to buttons
+        document.querySelectorAll('.btn').forEach(button => {
+            button.addEventListener('click', function(e) {
+                const ripple = document.createElement('span');
+                const rect = this.getBoundingClientRect();
+                const size = Math.max(rect.width, rect.height);
+                const x = e.clientX - rect.left - size / 2;
+                const y = e.clientY - rect.top - size / 2;
+                
+                ripple.style.cssText = `
+                    position: absolute;
+                    border-radius: 50%;
+                    background: rgba(255, 255, 255, 0.7);
+                    transform: scale(0);
+                    animation: ripple-animation 0.6s linear;
+                    width: ${size}px;
+                    height: ${size}px;
+                    top: ${y}px;
+                    left: ${x}px;
+                `;
+                
+                this.appendChild(ripple);
+                
+                setTimeout(() => {
+                    ripple.remove();
+                }, 600);
+            });
+        });
+        
+        // Add CSS for ripple animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes ripple-animation {
+                to {
+                    transform: scale(4);
+                    opacity: 0;
+                }
+            }
+            .btn {
+                position: relative;
+                overflow: hidden;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Log error to console for debugging
+        console.error('QuickDeploy Error <%= status || 500 %>: <%= message || "Unknown error" %>');
+        <% if (error && error.message) { %>
+        console.error('Error details:', '<%= error.message %>');
+        <% } %>
+        
+        // Check Supabase status
+        async function checkSupabaseStatus() {
+            try {
+                const response = await fetch('https://api.status.supabase.com/v1/status');
+                const data = await response.json();
+                if (!data.status || data.status.indicator !== 'none') {
+                    console.warn('Supabase might be experiencing issues:', data.status);
+                }
+            } catch (error) {
+                console.warn('Could not check Supabase status:', error);
+            }
+        }
+        
+        // Check status on 500 errors
+        if (<%= [500, 502, 503, 504].includes(status) %>) {
+            checkSupabaseStatus();
+        }
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F5') location.reload();
+            if (e.key === 'Escape') history.back();
+            if (e.key === 'h' || e.key === 'H') window.location.href = '/';
+            if (e.key === 's' || e.key === 'S') {
+                window.open('https://status.supabase.com/', '_blank');
+            }
+        });
+        
+        // Auto-redirect after 30 seconds for certain errors
+        if (<%= [404, 500, 503].includes(status) %>) {
+            setTimeout(() => {
+                if (confirm('You will be redirected to the homepage. Click OK to continue or Cancel to stay.')) {
+                    window.location.href = '/';
+                }
+            }, 30000);
+        }
+        
+        // Show Supabase dashboard link for admins (based on localStorage)
+        if (localStorage.getItem('quickdeploy_admin') === 'true') {
+            const footer = document.querySelector('.error-footer');
+            const adminLink = document.createElement('p');
+            adminLink.innerHTML = '<i class="fas fa-user-shield"></i> <a href="https://muigampswuqdswbulgjg.supabase.co" target="_blank" style="color: #3ecf8e;">Open Supabase Dashboard</a>';
+            adminLink.style.fontSize = '0.8rem';
+            adminLink.style.marginTop = '5px';
+            footer.appendChild(adminLink);
+        }
+    </script>
 </body>
 </html>
