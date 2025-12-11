@@ -60,17 +60,44 @@ const supabase = createClient(config.supabaseUrl, config.supabaseServiceKey);
 
 async function testSupabaseConnection() {
     try {
-        const { data, error } = await supabase.from('deployments').select('count').limit(1);
-        if (error) {
-            if (!error.message.includes('does not exist')) {
-                throw error;
-            }
+        const { data, error } = await supabase.from('_test').select('count').limit(1);
+        if (error && !error.message.includes('does not exist')) {
+            throw error;
         }
         console.log('✅ Supabase connection successful');
         return true;
     } catch (error) {
         console.error('❌ Supabase connection failed:', error.message);
         if (!isVercel) process.exit(1);
+        return false;
+    }
+}
+
+async function ensureDatabaseTables() {
+    console.log('🔍 Checking database tables...');
+    
+    try {
+        const { data: tableCheck, error: tableError } = await supabase
+            .from('deployments')
+            .select('*')
+            .limit(1);
+
+        if (tableError && tableError.code === 'PGRST204') {
+            console.log('❌ deployments table not found in schema cache.');
+            console.log('⚠️ You need to:');
+            console.log('   1. Run setup-database.js');
+            console.log('   2. Refresh schema cache in Supabase Dashboard');
+            console.log('');
+            console.log('Run: node setup-database.js');
+            
+            return false;
+        }
+        
+        console.log('✅ Database tables are accessible');
+        return true;
+        
+    } catch (error) {
+        console.error('❌ Database check failed:', error.message);
         return false;
     }
 }
@@ -266,7 +293,24 @@ app.get('/', async (req, res) => {
                 .order('created_at', { ascending: false })
                 .limit(10);
             
+            if (error && error.code === 'PGRST204') {
+                return res.render('index', {
+                    title: 'Dashboard',
+                    recentDeployments: [],
+                    stats: {
+                        total_deployments: 0,
+                        active_deployments: 0,
+                        total_size: 0,
+                        total_files: 0,
+                        expiring_soon: 0
+                    },
+                    deploymentsCount: 0,
+                    setupRequired: true
+                });
+            }
+            
             if (error) throw error;
+            
             recentDeployments = data || [];
             cache.set(cacheKey, recentDeployments, 60);
         }
@@ -276,21 +320,31 @@ app.get('/', async (req, res) => {
                 .from('deployments')
                 .select('total_size, file_count, expires_at');
             
-            if (deploymentsError) throw deploymentsError;
-            
-            const now = new Date();
-            const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
-            
-            stats = {
-                total_deployments: deploymentsData?.length || 0,
-                active_deployments: deploymentsData?.filter(d => new Date(d.expires_at) > now).length || 0,
-                total_size: deploymentsData?.reduce((sum, d) => sum + (d.total_size || 0), 0) || 0,
-                total_files: deploymentsData?.reduce((sum, d) => sum + (d.file_count || 0), 0) || 0,
-                expiring_soon: deploymentsData?.filter(d => {
-                    const exp = new Date(d.expires_at);
-                    return exp > now && exp < tomorrow;
-                }).length || 0
-            };
+            if (deploymentsError && deploymentsError.code === 'PGRST204') {
+                stats = {
+                    total_deployments: 0,
+                    active_deployments: 0,
+                    total_size: 0,
+                    total_files: 0,
+                    expiring_soon: 0
+                };
+            } else if (deploymentsError) {
+                throw deploymentsError;
+            } else {
+                const now = new Date();
+                const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+                
+                stats = {
+                    total_deployments: deploymentsData?.length || 0,
+                    active_deployments: deploymentsData?.filter(d => new Date(d.expires_at) > now).length || 0,
+                    total_size: deploymentsData?.reduce((sum, d) => sum + (d.total_size || 0), 0) || 0,
+                    total_files: deploymentsData?.reduce((sum, d) => sum + (d.file_count || 0), 0) || 0,
+                    expiring_soon: deploymentsData?.filter(d => {
+                        const exp = new Date(d.expires_at);
+                        return exp > now && exp < tomorrow;
+                    }).length || 0
+                };
+            }
             
             cache.set('stats', stats, 300);
         }
@@ -299,7 +353,8 @@ app.get('/', async (req, res) => {
             title: 'Dashboard',
             recentDeployments,
             stats,
-            deploymentsCount: recentDeployments.length
+            deploymentsCount: recentDeployments.length,
+            setupRequired: false
         });
         
         await logActivity('info', 'Accessed dashboard', null, null, req);
@@ -309,7 +364,8 @@ app.get('/', async (req, res) => {
         res.status(500).render('error', { 
             title: 'Error',
             message: 'Failed to load dashboard',
-            status: 500
+            status: 500,
+            error: { message: error.message }
         });
     }
 });
@@ -332,6 +388,22 @@ app.get('/admin', async (req, res) => {
             .neq('status', 'deleted')
             .order('created_at', { ascending: false });
         
+        if (deploymentsError && deploymentsError.code === 'PGRST204') {
+            return res.render('admin', {
+                title: 'Admin Panel',
+                allDeployments: [],
+                adminStats: {
+                    total_deployments: 0,
+                    active_deployments: 0,
+                    expired_deployments: 0,
+                    total_storage: 0,
+                    active_days: 0
+                },
+                deploymentsCount: 0,
+                setupRequired: true
+            });
+        }
+        
         if (deploymentsError) throw deploymentsError;
         
         const now = new Date();
@@ -347,7 +419,8 @@ app.get('/admin', async (req, res) => {
             title: 'Admin Panel',
             allDeployments: deployments || [],
             adminStats,
-            deploymentsCount: deployments?.length || 0
+            deploymentsCount: deployments?.length || 0,
+            setupRequired: false
         });
         
         await logActivity('info', 'Accessed admin panel', null, null, req);
@@ -357,7 +430,8 @@ app.get('/admin', async (req, res) => {
         res.status(500).render('error', { 
             title: 'Error',
             message: 'Failed to load admin panel',
-            status: 500
+            status: 500,
+            error: { message: error.message }
         });
     }
 });
@@ -372,11 +446,21 @@ app.get('/deployment/:id', async (req, res) => {
             .eq('id', deploymentId)
             .single();
         
+        if (deploymentError && deploymentError.code === 'PGRST204') {
+            return res.status(404).render('error', {
+                title: 'Not Found',
+                message: 'Database table not found. Please run setup.',
+                status: 404,
+                error: { message: 'Table deployments does not exist' }
+            });
+        }
+        
         if (deploymentError || !deployment) {
             return res.status(404).render('error', {
                 title: 'Not Found',
                 message: 'Deployment not found',
-                status: 404
+                status: 404,
+                error: { message: deploymentError?.message || 'Deployment not found' }
             });
         }
         
@@ -385,6 +469,14 @@ app.get('/deployment/:id', async (req, res) => {
             .select('*')
             .eq('deployment_id', deploymentId)
             .order('file_path');
+        
+        if (filesError && filesError.code === 'PGRST204') {
+            return res.render('deployment', {
+                title: deployment.name || 'Deployment',
+                deployment,
+                files: []
+            });
+        }
         
         if (filesError) throw filesError;
         
@@ -401,7 +493,8 @@ app.get('/deployment/:id', async (req, res) => {
         res.status(500).render('error', {
             title: 'Error',
             message: 'Failed to load deployment',
-            status: 500
+            status: 500,
+            error: { message: error.message }
         });
     }
 });
@@ -411,6 +504,18 @@ app.get('/api/stats', async (req, res) => {
         const { data: deployments, error } = await supabase
             .from('deployments')
             .select('total_size, file_count, expires_at');
+        
+        if (error && error.code === 'PGRST204') {
+            return res.json({
+                success: true,
+                totalDeployments: 0,
+                activeDeployments: 0,
+                totalSize: 0,
+                totalFiles: 0,
+                expiringSoon: 0,
+                setupRequired: true
+            });
+        }
         
         if (error) throw error;
         
@@ -437,7 +542,8 @@ app.get('/api/stats', async (req, res) => {
         console.error('Error getting stats:', error);
         res.status(500).json({
             success: false,
-            error: 'Failed to get system stats'
+            error: 'Failed to get system stats',
+            details: error.message
         });
     }
 });
@@ -504,14 +610,26 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
             .select()
             .single();
         
-        if (deploymentError) throw deploymentError;
+        if (deploymentError) {
+            if (deploymentError.code === 'PGRST204') {
+                return res.status(500).json({
+                    success: false,
+                    error: 'Database table not found. Please run setup.'
+                });
+            }
+            throw deploymentError;
+        }
         
         if (fileRecords.length > 0) {
             const { error: filesError } = await supabase
                 .from('deployment_files')
                 .insert(fileRecords);
             
-            if (filesError) throw filesError;
+            if (filesError && filesError.code === 'PGRST204') {
+                console.warn('deployment_files table not found, skipping file records');
+            } else if (filesError) {
+                throw filesError;
+            }
         }
         
         cache.del('recent_deployments');
@@ -546,6 +664,13 @@ app.get('/api/deployments/:id', async (req, res) => {
             .eq('id', req.params.id)
             .single();
         
+        if (deploymentError && deploymentError.code === 'PGRST204') {
+            return res.status(404).json({
+                success: false,
+                error: 'Database table not found'
+            });
+        }
+        
         if (deploymentError || !deployment) {
             return res.status(404).json({
                 success: false,
@@ -557,6 +682,14 @@ app.get('/api/deployments/:id', async (req, res) => {
             .from('deployment_files')
             .select('*')
             .eq('deployment_id', req.params.id);
+        
+        if (filesError && filesError.code === 'PGRST204') {
+            return res.json({
+                success: true,
+                deployment,
+                files: []
+            });
+        }
         
         if (filesError) throw filesError;
         
@@ -584,6 +717,13 @@ app.delete('/api/deployments/:id', async (req, res) => {
             .select('*')
             .eq('id', deploymentId)
             .single();
+        
+        if (checkError && checkError.code === 'PGRST204') {
+            return res.status(404).json({
+                success: false,
+                error: 'Database table not found'
+            });
+        }
         
         if (checkError || !deployment) {
             return res.status(404).json({
@@ -651,7 +791,15 @@ app.post('/api/deployments/:id/renew', async (req, res) => {
             })
             .eq('id', deploymentId);
         
-        if (error) throw error;
+        if (error) {
+            if (error.code === 'PGRST204') {
+                return res.status(500).json({
+                    success: false,
+                    error: 'Database table not found'
+                });
+            }
+            throw error;
+        }
         
         cache.del('recent_deployments');
         
@@ -674,16 +822,19 @@ app.post('/api/deployments/:id/renew', async (req, res) => {
 
 app.get('/api/health', async (req, res) => {
     try {
-        const { data, error } = await supabase.from('deployments').select('count').limit(1);
+        const { data, error } = await supabase.from('_test').select('count').limit(1);
         
         if (error && !error.message.includes('does not exist')) {
             throw error;
         }
         
+        const tablesCheck = await ensureDatabaseTables();
+        
         res.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
             supabase: 'connected',
+            database_tables: tablesCheck ? 'available' : 'setup_required',
             uptime: process.uptime(),
             environment: config.env,
             vercel: isVercel
@@ -712,6 +863,10 @@ app.get('/static/:deploymentId/*', async (req, res) => {
             .eq('id', deploymentId)
             .eq('status', 'active')
             .single();
+        
+        if (error && error.code === 'PGRST204') {
+            return res.status(404).send('Deployment not found (database not ready)');
+        }
         
         if (error || !deployment) {
             return res.status(404).send('Deployment not found');
@@ -752,11 +907,20 @@ app.get('/static/:deploymentId/*', async (req, res) => {
     }
 });
 
+app.get('/setup', async (req, res) => {
+    res.render('setup', {
+        title: 'Setup Required',
+        supabaseUrl: config.supabaseUrl,
+        setupRequired: true
+    });
+});
+
 app.use((req, res) => {
     res.status(404).render('error', {
         title: 'Page Not Found',
         message: 'The page you are looking for does not exist.',
-        status: 404
+        status: 404,
+        error: {}
     });
 });
 
@@ -776,10 +940,11 @@ app.use((err, req, res, next) => {
         title: 'Error',
         message,
         status: statusCode,
-        error: config.env === 'development' ? err : {}
+        error: { message: err.message, stack: config.env === 'development' ? err.stack : undefined }
     });
 });
 
 testSupabaseConnection();
+ensureDatabaseTables();
 
 module.exports = app;
