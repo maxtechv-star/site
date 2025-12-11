@@ -34,17 +34,20 @@ const mime = require('mime-types');
 // Configuration
 // ============================================================================
 
+const isVercel = process.env.VERCEL === '1' || process.env.VERCEL === 'true';
+const isProduction = process.env.NODE_ENV === 'production';
+
 const config = {
     port: process.env.PORT || 3000,
     env: process.env.NODE_ENV || 'development',
-    baseUrl: process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`,
+    baseUrl: isVercel ? `https://${process.env.VERCEL_URL}` : (process.env.BASE_URL || `http://localhost:${process.env.PORT || 3000}`),
     
     // Database
     databaseUrl: process.env.DATABASE_URL,
     
-    // File storage
-    uploadPath: process.env.UPLOAD_PATH || './uploads',
-    deploymentPath: process.env.DEPLOYMENT_PATH || './deployments',
+    // File storage - use /tmp on Vercel for write permissions
+    uploadPath: isVercel ? '/tmp/uploads' : (process.env.UPLOAD_PATH || './uploads'),
+    deploymentPath: isVercel ? '/tmp/deployments' : (process.env.DEPLOYMENT_PATH || './deployments'),
     maxFileSize: parseInt(process.env.MAX_FILE_SIZE) || 100 * 1024 * 1024, // 100MB
     maxFiles: parseInt(process.env.MAX_FILES) || 50,
     
@@ -67,38 +70,51 @@ const config = {
 };
 
 // ============================================================================
-// Logger Setup
+// Logger Setup (Vercel compatible)
 // ============================================================================
 
-const logDir = path.join(__dirname, 'logs');
-if (!fs.existsSync(logDir)) {
-    fs.mkdirSync(logDir, { recursive: true });
-}
+// Only create logs directory if we're not on Vercel
+let logger;
+if (isVercel) {
+    // Simple console logger for Vercel
+    logger = {
+        info: (...args) => console.log('[INFO]', ...args),
+        error: (...args) => console.error('[ERROR]', ...args),
+        warn: (...args) => console.warn('[WARN]', ...args),
+        debug: (...args) => console.debug('[DEBUG]', ...args)
+    };
+} else {
+    // Full Winston logger for local development
+    const logDir = path.join(__dirname, 'logs');
+    if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+    }
 
-const logger = winston.createLogger({
-    level: process.env.LOG_LEVEL || 'info',
-    format: winston.format.combine(
-        winston.format.timestamp(),
-        winston.format.errors({ stack: true }),
-        winston.format.json()
-    ),
-    defaultMeta: { service: 'quickdeploy' },
-    transports: [
-        new winston.transports.File({ 
-            filename: path.join(logDir, 'error.log'), 
-            level: 'error' 
-        }),
-        new winston.transports.File({ 
-            filename: path.join(logDir, 'combined.log') 
-        }),
-        new winston.transports.Console({
-            format: winston.format.combine(
-                winston.format.colorize(),
-                winston.format.simple()
-            )
-        })
-    ]
-});
+    logger = winston.createLogger({
+        level: process.env.LOG_LEVEL || 'info',
+        format: winston.format.combine(
+            winston.format.timestamp(),
+            winston.format.errors({ stack: true }),
+            winston.format.json()
+        ),
+        defaultMeta: { service: 'quickdeploy' },
+        transports: [
+            new winston.transports.File({ 
+                filename: path.join(logDir, 'error.log'), 
+                level: 'error' 
+            }),
+            new winston.transports.File({ 
+                filename: path.join(logDir, 'combined.log') 
+            }),
+            new winston.transports.Console({
+                format: winston.format.combine(
+                    winston.format.colorize(),
+                    winston.format.simple()
+                )
+            })
+        ]
+    });
+}
 
 // ============================================================================
 // Database Setup
@@ -106,7 +122,7 @@ const logger = winston.createLogger({
 
 const pool = new Pool({
     connectionString: config.databaseUrl,
-    ssl: config.env === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: isProduction ? { rejectUnauthorized: false } : false,
     max: 20,
     idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 2000,
@@ -120,7 +136,8 @@ pool.connect()
     })
     .catch(err => {
         logger.error('❌ Database connection failed:', err.message);
-        process.exit(1);
+        // Don't exit on Vercel - let the server start anyway
+        if (!isVercel) process.exit(1);
     });
 
 // ============================================================================
@@ -129,18 +146,24 @@ pool.connect()
 
 const app = express();
 
-// Security middleware
-app.use(helmet({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://code.jquery.com"],
-            fontSrc: ["'self'", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
-            imgSrc: ["'self'", "data:", "https:"],
+// Security middleware - disable CSP on Vercel for static files
+if (isVercel) {
+    app.use(helmet({
+        contentSecurityPolicy: false
+    }));
+} else {
+    app.use(helmet({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+                scriptSrc: ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com", "https://code.jquery.com"],
+                fontSrc: ["'self'", "https://cdnjs.cloudflare.com", "https://fonts.gstatic.com"],
+                imgSrc: ["'self'", "data:", "https:"],
+            }
         }
-    }
-}));
+    }));
+}
 
 // Compression
 app.use(compression());
@@ -162,33 +185,49 @@ app.use(methodOverride('_method'));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/static', express.static(config.deploymentPath));
 
-// Rate limiting
-const limiter = rateLimit({
-    windowMs: config.rateLimitWindow * 60 * 1000,
-    max: config.rateLimitMax,
-    message: { error: 'Too many requests, please try again later.' },
-    standardHeaders: true,
-    legacyHeaders: false,
-});
-app.use('/api/', limiter);
+// Rate limiting - disable on Vercel if needed
+if (!isVercel) {
+    const limiter = rateLimit({
+        windowMs: config.rateLimitWindow * 60 * 1000,
+        max: config.rateLimitMax,
+        message: { error: 'Too many requests, please try again later.' },
+        standardHeaders: true,
+        legacyHeaders: false,
+    });
+    app.use('/api/', limiter);
+}
 
-// Session middleware
-app.use(session({
-    store: new pgSession({
-        pool: pool,
-        tableName: 'session',
-        createTableIfMissing: true
-    }),
-    secret: config.sessionSecret,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: config.env === 'production',
-        httpOnly: true,
-        maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        sameSite: 'lax'
-    }
-}));
+// Session middleware - use memory store on Vercel for simplicity
+if (isVercel) {
+    app.use(session({
+        secret: config.sessionSecret,
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: true,
+            httpOnly: true,
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            sameSite: 'lax'
+        }
+    }));
+} else {
+    app.use(session({
+        store: new pgSession({
+            pool: pool,
+            tableName: 'session',
+            createTableIfMissing: true
+        }),
+        secret: config.sessionSecret,
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: config.env === 'production',
+            httpOnly: true,
+            maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+            sameSite: 'lax'
+        }
+    }));
+}
 
 // View engine setup
 app.set('view engine', 'ejs');
@@ -199,11 +238,18 @@ app.set('views', path.join(__dirname, 'views'));
 // ============================================================================
 
 // Ensure upload directories exist
-[config.uploadPath, config.deploymentPath].forEach(dir => {
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-});
+try {
+    [config.uploadPath, config.deploymentPath].forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+            logger.info(`Created directory: ${dir}`);
+        }
+    });
+} catch (error) {
+    logger.error('Failed to create directories:', error);
+    // Continue anyway on Vercel
+    if (!isVercel) throw error;
+}
 
 // Configure multer for file uploads
 const uploadStorage = multer.diskStorage({
@@ -212,11 +258,15 @@ const uploadStorage = multer.diskStorage({
         req.uploadId = uploadId;
         const uploadDir = path.join(config.uploadPath, uploadId);
         
-        if (!fs.existsSync(uploadDir)) {
-            fs.mkdirSync(uploadDir, { recursive: true });
+        try {
+            if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            cb(null, uploadDir);
+        } catch (error) {
+            logger.error('Failed to create upload directory:', error);
+            cb(error);
         }
-        
-        cb(null, uploadDir);
     },
     filename: (req, file, cb) => {
         // Sanitize filename
@@ -294,21 +344,31 @@ function formatBytes(bytes, decimals = 2) {
  * Recursively get all files in a directory
  */
 function getAllFiles(dirPath, arrayOfFiles = []) {
-    const files = fs.readdirSync(dirPath);
-    
-    files.forEach(file => {
-        const fullPath = path.join(dirPath, file);
-        if (fs.statSync(fullPath).isDirectory()) {
-            arrayOfFiles = getAllFiles(fullPath, arrayOfFiles);
-        } else {
-            arrayOfFiles.push({
-                path: fullPath,
-                name: file,
-                size: fs.statSync(fullPath).size,
-                relativePath: path.relative(dirPath, fullPath)
-            });
-        }
-    });
+    try {
+        if (!fs.existsSync(dirPath)) return arrayOfFiles;
+        
+        const files = fs.readdirSync(dirPath);
+        
+        files.forEach(file => {
+            const fullPath = path.join(dirPath, file);
+            try {
+                if (fs.statSync(fullPath).isDirectory()) {
+                    arrayOfFiles = getAllFiles(fullPath, arrayOfFiles);
+                } else {
+                    arrayOfFiles.push({
+                        path: fullPath,
+                        name: file,
+                        size: fs.statSync(fullPath).size,
+                        relativePath: path.relative(dirPath, fullPath)
+                    });
+                }
+            } catch (error) {
+                logger.error(`Error reading file ${fullPath}:`, error);
+            }
+        });
+    } catch (error) {
+        logger.error(`Error reading directory ${dirPath}:`, error);
+    }
     
     return arrayOfFiles;
 }
@@ -430,7 +490,8 @@ app.get('/', async (req, res) => {
         logger.error('Error loading dashboard:', error);
         res.status(500).render('error', { 
             title: 'Error',
-            message: 'Failed to load dashboard' 
+            message: 'Failed to load dashboard',
+            status: 500
         });
     }
 });
@@ -493,7 +554,8 @@ app.get('/admin', requireAdmin, async (req, res) => {
         logger.error('Error loading admin panel:', error);
         res.status(500).render('error', { 
             title: 'Error',
-            message: 'Failed to load admin panel' 
+            message: 'Failed to load admin panel',
+            status: 500
         });
     }
 });
@@ -514,7 +576,8 @@ app.get('/deployment/:id', async (req, res) => {
         if (deploymentResult.rows.length === 0) {
             return res.status(404).render('error', {
                 title: 'Not Found',
-                message: 'Deployment not found'
+                message: 'Deployment not found',
+                status: 404
             });
         }
         
@@ -544,7 +607,8 @@ app.get('/deployment/:id', async (req, res) => {
         logger.error('Error loading deployment:', error);
         res.status(500).render('error', {
             title: 'Error',
-            message: 'Failed to load deployment'
+            message: 'Failed to load deployment',
+            status: 500
         });
     }
 });
@@ -607,7 +671,8 @@ app.get('/deployments', async (req, res) => {
         logger.error('Error loading deployments:', error);
         res.status(500).render('error', {
             title: 'Error',
-            message: 'Failed to load deployments'
+            message: 'Failed to load deployments',
+            status: 500
         });
     }
 });
@@ -798,7 +863,9 @@ app.post('/api/upload', upload.array('files'), async (req, res) => {
         }
         
         // Clean up upload directory
-        fs.rmSync(uploadDir, { recursive: true, force: true });
+        if (fs.existsSync(uploadDir)) {
+            fs.rmSync(uploadDir, { recursive: true, force: true });
+        }
         
         await client.query('COMMIT');
         
@@ -931,7 +998,9 @@ app.post('/api/upload-zip', upload.single('zipFile'), async (req, res) => {
         }
         
         // Clean up uploaded ZIP
-        fs.unlinkSync(req.file.path);
+        if (fs.existsSync(req.file.path)) {
+            fs.unlinkSync(req.file.path);
+        }
         
         await client.query('COMMIT');
         
@@ -1290,17 +1359,13 @@ app.get('/api/health', async (req, res) => {
         // Check database connection
         await pool.query('SELECT 1');
         
-        // Check disk space
-        const deploymentDir = config.deploymentPath;
-        const stats = fs.statfsSync(deploymentDir);
-        const freeSpace = stats.bavail * stats.bsize;
-        
         res.json({
             status: 'healthy',
             timestamp: new Date().toISOString(),
             database: 'connected',
-            diskSpace: formatBytes(freeSpace),
-            uptime: process.uptime()
+            uptime: process.uptime(),
+            environment: config.env,
+            vercel: isVercel
         });
         
     } catch (error) {
@@ -1308,7 +1373,9 @@ app.get('/api/health', async (req, res) => {
         res.status(500).json({
             status: 'unhealthy',
             timestamp: new Date().toISOString(),
-            error: error.message
+            error: error.message,
+            environment: config.env,
+            vercel: isVercel
         });
     }
 });
@@ -1321,7 +1388,8 @@ app.get('/api/health', async (req, res) => {
 app.use((req, res) => {
     res.status(404).render('error', {
         title: 'Page Not Found',
-        message: 'The page you are looking for does not exist.'
+        message: 'The page you are looking for does not exist.',
+        status: 404
     });
 });
 
@@ -1341,6 +1409,7 @@ app.use((err, req, res, next) => {
     res.status(statusCode).render('error', {
         title: 'Error',
         message: message,
+        status: statusCode,
         error: config.env === 'development' ? err : {}
     });
 });
@@ -1354,6 +1423,11 @@ app.use((err, req, res, next) => {
  */
 async function cleanupOldUploads() {
     try {
+        // Skip cleanup on Vercel
+        if (isVercel) {
+            return;
+        }
+        
         const uploadDir = config.uploadPath;
         if (!fs.existsSync(uploadDir)) return;
         
@@ -1380,52 +1454,57 @@ async function cleanupOldUploads() {
  */
 async function startServer() {
     try {
-        // Cleanup old uploads
+        // Cleanup old uploads (local only)
         await cleanupOldUploads();
         
-        // Start server
-        app.listen(config.port, () => {
-            logger.info(`✅ Server running on port ${config.port}`);
-            logger.info(`📁 Upload path: ${config.uploadPath}`);
-            logger.info(`📁 Deployment path: ${config.deploymentPath}`);
-            logger.info(`🌐 Base URL: ${config.baseUrl}`);
-            logger.info(`🔧 Environment: ${config.env}`);
-            
-            console.log('\n============================================');
-            console.log('🚀 QuickDeploy is running!');
-            console.log('============================================');
-            console.log(`Local:    ${config.baseUrl}`);
-            console.log(`Upload:   ${config.baseUrl}/upload`);
-            console.log(`Admin:    ${config.baseUrl}/admin`);
-            console.log('============================================\n');
-        });
+        if (!isVercel) {
+            // Start server normally for local development
+            app.listen(config.port, () => {
+                logger.info(`✅ Server running on port ${config.port}`);
+                logger.info(`📁 Upload path: ${config.uploadPath}`);
+                logger.info(`📁 Deployment path: ${config.deploymentPath}`);
+                logger.info(`🌐 Base URL: ${config.baseUrl}`);
+                logger.info(`🔧 Environment: ${config.env}`);
+                
+                console.log('\n============================================');
+                console.log('🚀 QuickDeploy is running!');
+                console.log('============================================');
+                console.log(`Local:    ${config.baseUrl}`);
+                console.log(`Upload:   ${config.baseUrl}/upload`);
+                console.log(`Admin:    ${config.baseUrl}/admin`);
+                console.log('============================================\n');
+            });
+        }
         
     } catch (error) {
         logger.error('Failed to start server:', error);
-        process.exit(1);
+        if (!isVercel) process.exit(1);
     }
 }
 
-// Handle graceful shutdown
-process.on('SIGTERM', () => {
-    logger.info('SIGTERM received, shutting down gracefully...');
-    pool.end(() => {
-        logger.info('Database pool closed');
-        process.exit(0);
+// Handle graceful shutdown (local only)
+if (!isVercel) {
+    process.on('SIGTERM', () => {
+        logger.info('SIGTERM received, shutting down gracefully...');
+        pool.end(() => {
+            logger.info('Database pool closed');
+            process.exit(0);
+        });
     });
-});
 
-process.on('SIGINT', () => {
-    logger.info('SIGINT received, shutting down gracefully...');
-    pool.end(() => {
-        logger.info('Database pool closed');
-        process.exit(0);
+    process.on('SIGINT', () => {
+        logger.info('SIGINT received, shutting down gracefully...');
+        pool.end(() => {
+            logger.info('Database pool closed');
+            process.exit(0);
+        });
     });
-});
+}
 
-// Start the server
-if (require.main === module) {
+// Start the server (local only)
+if (require.main === module && !isVercel) {
     startServer();
 }
 
+// Export for Vercel serverless
 module.exports = app;
